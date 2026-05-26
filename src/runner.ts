@@ -1,0 +1,384 @@
+import { WebPerlRunner } from "wasm-latex-tools";
+
+export type RunnerState = "idle" | "loading" | "ready" | "error";
+
+export type LoadStage = "download" | "runtime" | "ready" | "error";
+
+export interface LoadProgress {
+  stage: LoadStage;
+  percent: number;
+  message: string;
+  detail: string;
+}
+
+const ENGINE_FILES = [
+  { name: "emperl.data", weight: 65 },
+  { name: "emperl.wasm", weight: 25 },
+  { name: "emperl.js", weight: 5 },
+  { name: "webperl.js", weight: 2 },
+  { name: "perlrunner.html", weight: 3 },
+] as const;
+
+const DOWNLOAD_WEIGHT = 78;
+const RUNTIME_START = 78;
+const RUNTIME_END = 96;
+const FETCH_TIMEOUT_MS = 90_000;
+const INIT_TIMEOUT_MS = 120_000;
+
+let runner: WebPerlRunner | null = null;
+let state: RunnerState = "idle";
+let initPromise: Promise<WebPerlRunner> | null = null;
+let loadError: string | null = null;
+const loadLog: string[] = [];
+let progress: LoadProgress = {
+  stage: "download",
+  percent: 0,
+  message: "Waiting…",
+  detail: "",
+};
+
+const progressListeners = new Set<(p: LoadProgress) => void>();
+const stateListeners = new Set<(s: RunnerState) => void>();
+const logListeners = new Set<(lines: readonly string[]) => void>();
+
+export function getRunnerState(): RunnerState {
+  return state;
+}
+
+export function getLoadProgress(): LoadProgress {
+  return { ...progress };
+}
+
+export function getLoadLog(): readonly string[] {
+  return loadLog;
+}
+
+export function getRunner(): WebPerlRunner | null {
+  return state === "ready" ? runner : null;
+}
+
+export function onRunnerStateChange(cb: (state: RunnerState) => void): () => void {
+  stateListeners.add(cb);
+  return () => stateListeners.delete(cb);
+}
+
+export function onLoadProgressChange(cb: (p: LoadProgress) => void): () => void {
+  progressListeners.add(cb);
+  cb({ ...progress });
+  return () => progressListeners.delete(cb);
+}
+
+export function onLoadLogChange(cb: (lines: readonly string[]) => void): () => void {
+  logListeners.add(cb);
+  cb(loadLog);
+  return () => logListeners.delete(cb);
+}
+
+function logLoad(line: string) {
+  const stamp = new Date().toISOString().slice(11, 19);
+  const entry = `${stamp} ${line}`;
+  loadLog.push(entry);
+  if (loadLog.length > 80) {
+    loadLog.splice(0, loadLog.length - 80);
+  }
+  for (const cb of logListeners) {
+    cb(loadLog);
+  }
+}
+
+function emitProgress(next: Partial<LoadProgress> & Pick<LoadProgress, "message">) {
+  progress = {
+    stage: next.stage ?? progress.stage,
+    percent: Math.min(100, Math.max(0, next.percent ?? progress.percent)),
+    message: next.message,
+    detail: next.detail ?? progress.detail,
+  };
+  for (const cb of progressListeners) {
+    cb({ ...progress });
+  }
+}
+
+function setState(next: RunnerState) {
+  state = next;
+  for (const cb of stateListeners) {
+    cb(next);
+  }
+}
+
+/** Resolve asset paths to absolute URLs (fixes relative ./ on some hosts). */
+function resolveAssetUrl(relativePath: string): string {
+  const base = new URL(import.meta.env.BASE_URL, window.location.href);
+  return new URL(relativePath, base).href;
+}
+
+function webperlUrl(file: string): string {
+  return resolveAssetUrl(`core/webperl/${file}`);
+}
+
+function webperlBasePath(): string {
+  return resolveAssetUrl("core/webperl").replace(/\/$/, "");
+}
+
+function perlScriptsPath(): string {
+  return resolveAssetUrl("core/perl").replace(/\/$/, "");
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function fetchToCache(
+  url: string,
+  onBytes: (loaded: number, total: number) => void,
+): Promise<void> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      cache: "default",
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} for ${url}`);
+    }
+
+    const total = Number(res.headers.get("content-length")) || 0;
+    const body = res.body;
+
+    if (!body || total <= 0) {
+      await res.arrayBuffer();
+      onBytes(1, 1);
+      return;
+    }
+
+    const reader = body.getReader();
+    let loaded = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      loaded += value.length;
+      onBytes(loaded, total);
+    }
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Timed out after ${FETCH_TIMEOUT_MS / 1000}s: ${url}`);
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+async function verifyAssetsReachable(): Promise<void> {
+  const probe = webperlUrl("perlrunner.html");
+  logLoad(`HEAD ${probe}`);
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 15_000);
+  try {
+    const res = await fetch(probe, { method: "HEAD", signal: controller.signal });
+    if (!res.ok) {
+      throw new Error(`perlrunner.html not found (${res.status})`);
+    }
+    logLoad(`OK perlrunner.html (${res.status})`);
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+async function warmEngineAssets(): Promise<void> {
+  let completedWeight = 0;
+  let skipped = 0;
+
+  for (const file of ENGINE_FILES) {
+    const url = webperlUrl(file.name);
+    emitProgress({
+      stage: "download",
+      percent: (completedWeight / 100) * DOWNLOAD_WEIGHT,
+      message: `Prefetch ${file.name}`,
+      detail: url,
+    });
+    logLoad(`GET ${url}`);
+
+    try {
+      await fetchToCache(url, (loaded, total) => {
+        const fileRatio = total > 0 ? loaded / total : 1;
+        const overall = completedWeight + file.weight * fileRatio;
+        const pct = (overall / 100) * DOWNLOAD_WEIGHT;
+        emitProgress({
+          stage: "download",
+          percent: pct,
+          message: `Prefetch ${file.name}`,
+          detail: total > 0 ? `${formatBytes(loaded)} / ${formatBytes(total)}` : file.name,
+        });
+      });
+      logLoad(`OK ${file.name}`);
+    } catch (err) {
+      skipped += 1;
+      const msg = err instanceof Error ? err.message : String(err);
+      logLoad(`SKIP ${file.name}: ${msg}`);
+    }
+
+    completedWeight += file.weight;
+  }
+
+  if (skipped > 0) {
+    logLoad(`Prefetch skipped ${skipped}/${ENGINE_FILES.length} file(s) — continuing`);
+  } else {
+    logLoad("Prefetch complete");
+  }
+
+  emitProgress({
+    stage: "download",
+    percent: DOWNLOAD_WEIGHT,
+    message: skipped > 0 ? "Prefetch partial — starting runtime" : "Prefetch complete",
+    detail: "",
+  });
+}
+
+function createRunner(): WebPerlRunner {
+  const base = webperlBasePath();
+  const perl = perlScriptsPath();
+  logLoad(`WebPerlRunner webperlBasePath=${base}`);
+  logLoad(`WebPerlRunner perlScriptsPath=${perl}`);
+  return new WebPerlRunner({
+    webperlBasePath: base,
+    perlScriptsPath: perl,
+    verbose: true,
+  });
+}
+
+async function initializeRunner(): Promise<WebPerlRunner> {
+  loadLog.length = 0;
+  logLoad(`Page: ${window.location.href}`);
+  logLoad(`BASE_URL: ${import.meta.env.BASE_URL}`);
+
+  emitProgress({
+    stage: "download",
+    percent: 0,
+    message: "Checking engine files…",
+    detail: "",
+  });
+
+  try {
+    await verifyAssetsReachable();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logLoad(`WARN asset check: ${msg}`);
+  }
+
+  await warmEngineAssets();
+
+  emitProgress({
+    stage: "runtime",
+    percent: RUNTIME_START,
+    message: "Starting Perl runtime…",
+    detail: webperlUrl("perlrunner.html"),
+  });
+
+  runner = createRunner();
+  const iframeSrc = `${webperlBasePath()}/perlrunner.html`;
+  logLoad(`iframe ${iframeSrc}`);
+
+  const perlMessageHandler = (event: MessageEvent) => {
+    const data = event.data as Record<string, unknown> | null;
+    if (!data || typeof data !== "object") return;
+    if (typeof data.perlRunnerError === "string") {
+      logLoad(`perlRunnerError: ${data.perlRunnerError}`);
+    }
+    if (data.perlRunnerState === "Ready") {
+      logLoad("perlRunnerState: Ready");
+    }
+  };
+  window.addEventListener("message", perlMessageHandler);
+
+  const tick = window.setInterval(() => {
+    if (state !== "loading") {
+      window.clearInterval(tick);
+      return;
+    }
+    const p = progress.percent;
+    if (p < RUNTIME_END) {
+      emitProgress({
+        stage: "runtime",
+        percent: Math.min(RUNTIME_END, p + 1.5),
+        message: "Initializing WebPerl…",
+        detail: "Waiting for perlrunner Ready",
+      });
+    }
+  }, 400);
+
+  const initTimer = window.setTimeout(() => {
+    logLoad(`ERROR init exceeded ${INIT_TIMEOUT_MS / 1000}s`);
+  }, INIT_TIMEOUT_MS);
+
+  try {
+    logLoad("runner.initialize()…");
+    await runner.initialize();
+    logLoad("runner.initialize() done");
+  } finally {
+    window.clearTimeout(initTimer);
+    window.clearInterval(tick);
+    window.removeEventListener("message", perlMessageHandler);
+  }
+
+  emitProgress({
+    stage: "ready",
+    percent: 100,
+    message: "Engine ready",
+    detail: "",
+  });
+  logLoad("Engine ready");
+
+  return runner;
+}
+
+/** Start loading WebPerl in the background (safe to call multiple times). */
+export function startBackgroundLoad(): void {
+  if (state === "ready" || state === "loading" || initPromise) {
+    return;
+  }
+
+  setState("loading");
+  initPromise = (async () => {
+    try {
+      const r = await initializeRunner();
+      setState("ready");
+      return r;
+    } catch (err) {
+      loadError = err instanceof Error ? err.message : String(err);
+      logLoad(`FAILED: ${loadError}`);
+      emitProgress({
+        stage: "error",
+        percent: progress.percent,
+        message: "Engine failed to load",
+        detail: loadError,
+      });
+      setState("error");
+      initPromise = null;
+      throw err;
+    }
+  })();
+}
+
+/** Wait until WebPerl is ready (starts load if needed). */
+export async function ensureRunner(): Promise<WebPerlRunner> {
+  if (state === "ready" && runner) {
+    return runner;
+  }
+  if (initPromise) {
+    return initPromise;
+  }
+  startBackgroundLoad();
+  if (!initPromise) {
+    throw new Error(loadError ?? "Failed to start WebPerl");
+  }
+  return initPromise;
+}
+
+export function getLoadError(): string | null {
+  return loadError;
+}

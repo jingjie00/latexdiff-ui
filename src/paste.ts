@@ -8,20 +8,64 @@ export function normalizePastedText(raw: string): string {
     .replace(/\u2029/g, "\n");
 }
 
-/** Prefer text/plain; fall back to stripping HTML (e.g. Word, Google Docs). */
-export function extractPlainFromClipboard(cd: DataTransfer): string {
+const TEXT_EXTENSIONS = new Set([
+  "tex",
+  "ltx",
+  "latex",
+  "txt",
+  "md",
+  "bib",
+  "sty",
+  "cls",
+  "bst",
+  "bbl",
+]);
+
+function isTextLikeFile(file: File): boolean {
+  if (file.type.startsWith("text/")) return true;
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  return TEXT_EXTENSIONS.has(ext);
+}
+
+/** First text-like file on the clipboard (e.g. copied from Finder). */
+function getPastedFile(cd: DataTransfer): File | null {
+  if (cd.files.length > 0) {
+    for (const file of cd.files) {
+      if (isTextLikeFile(file)) return file;
+    }
+  }
+
+  for (const item of cd.items) {
+    if (item.kind === "file") {
+      const file = item.getAsFile();
+      if (file && isTextLikeFile(file)) return file;
+    }
+  }
+
+  return null;
+}
+
+/** Read clipboard: file contents first, then plain/HTML text. */
+export async function extractFromClipboard(
+  cd: DataTransfer,
+): Promise<{ text: string; file: File | null } | null> {
+  const file = getPastedFile(cd);
+  if (file) {
+    return { text: normalizePastedText(await file.text()), file };
+  }
+
   const plain = cd.getData("text/plain");
   if (plain) {
-    return normalizePastedText(plain);
+    return { text: normalizePastedText(plain), file: null };
   }
 
   const html = cd.getData("text/html");
   if (html) {
     const doc = new DOMParser().parseFromString(html, "text/html");
-    return normalizePastedText(doc.body.textContent ?? "");
+    return { text: normalizePastedText(doc.body.textContent ?? ""), file: null };
   }
 
-  return "";
+  return null;
 }
 
 export function insertTextAtSelection(textarea: HTMLTextAreaElement, text: string): void {
@@ -35,9 +79,18 @@ export function insertTextAtSelection(textarea: HTMLTextAreaElement, text: strin
   textarea.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+export function replaceEditorContent(textarea: HTMLTextAreaElement, text: string): void {
+  textarea.value = text;
+  textarea.setSelectionRange(text.length, text.length);
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 let lastActiveEditor: HTMLTextAreaElement | null = null;
 
-export function wirePlainPaste(editors: HTMLTextAreaElement[]): void {
+export function wirePlainPaste(
+  editors: HTMLTextAreaElement[],
+  onFilePaste?: (editor: HTMLTextAreaElement, file: File) => void,
+): void {
   for (const editor of editors) {
     editor.addEventListener("focus", () => {
       lastActiveEditor = editor;
@@ -46,7 +99,7 @@ export function wirePlainPaste(editors: HTMLTextAreaElement[]): void {
 
   document.addEventListener(
     "paste",
-    (e) => {
+    async (e) => {
       const fromEvent =
         e.target instanceof HTMLTextAreaElement && editors.includes(e.target)
           ? e.target
@@ -61,13 +114,19 @@ export function wirePlainPaste(editors: HTMLTextAreaElement[]): void {
         return;
       }
 
-      const text = extractPlainFromClipboard(cd);
-      if (!text) {
+      const extracted = await extractFromClipboard(cd);
+      if (!extracted) {
         return;
       }
 
       e.preventDefault();
-      insertTextAtSelection(fromEvent, text);
+
+      if (extracted.file) {
+        replaceEditorContent(fromEvent, extracted.text);
+        onFilePaste?.(fromEvent, extracted.file);
+      } else {
+        insertTextAtSelection(fromEvent, extracted.text);
+      }
     },
     true,
   );
