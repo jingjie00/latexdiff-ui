@@ -13,7 +13,9 @@
 | `firebase-hosting-merge.yml` | Push to `main` | `npm ci` → `npm run build` → `firebase deploy` (live) |
 | `firebase-hosting-pull-request.yml` | Pull request | Same build → preview channel `pr-<number>` |
 
-We deploy **`dist/`** (Vite output) via the Firebase CLI — not `FirebaseExtended/action-hosting-deploy`, which can fail when GitHub cannot download that action from codeload.
+We deploy **`dist/`** (Vite output) via the Firebase CLI in a plain shell step. Workflows avoid extra marketplace actions (`FirebaseExtended/action-hosting-deploy`, `google-github-actions/auth`, etc.) because GitHub sometimes cannot download them from codeload (403 / internal server error).
+
+Authentication: the service account JSON secret is written to `$RUNNER_TEMP/firebase-sa.json` and `GOOGLE_APPLICATION_CREDENTIALS` is set — no `google-github-actions/auth` action.
 
 ## Manual deploy
 
