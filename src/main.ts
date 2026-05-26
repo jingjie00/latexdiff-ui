@@ -1,3 +1,4 @@
+import "./engine-bootstrap";
 import "./style.css";
 import { LatexDiff } from "wasm-latex-tools";
 import type { LatexDiffOptions } from "wasm-latex-tools";

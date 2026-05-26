@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/generate-sw.cjs && vite build",
     "preview": "vite preview",
-    "postinstall": "node scripts/copy-assets-lite.cjs"
+    "postinstall": "node scripts/copy-assets-lite.cjs && node scripts/generate-sw.cjs"
   },
   "dependencies": {
     "wasm-latex-tools": "^0.1.1"

@@ -47,7 +47,7 @@ That usually means:
 | **Output** | Copy or download generated `diff.tex`; **Source / Preview** toggle with coloured `\DIFadd` / `\DIFdel` highlighting |
 | **Options** | Collapsible panel for common `latexdiff` flags (`--type`, `--subtype`, `--floattype`, `--math-markup`, `--encoding`, `--flatten`, `--allow-spaces`) |
 | **UX** | Light/dark theme, **Load demo** samples, in-app **tutorial** and **about** popovers |
-| **Engine** | Background load of WebPerl with progress; first run downloads ~15 MB of WASM assets (cached afterward) |
+| **Engine** | Background load of WebPerl; first visit caches ~15 MB via service worker (same-origin, fast return visits) |
 
 ---
 
@@ -174,7 +174,7 @@ latexdiff-ui/
 
 - **Bundled `latexdiff` version** comes from `wasm-latex-tools`, not your system TeX Live — options and behaviour follow that bundle.
 - **`--flatten`** only inlines `\input`/`\include` when those files are available inside the WASM filesystem; for typical single-file `main.tex` pairs, leave flatten **off**.
-- **First visit** downloads large WASM assets; slow networks may take time (the UI shows load progress and logs).
+- **First visit** downloads large WASM assets into a service worker cache (`sw.js`); repeat visits load from cache (same origin). Slow first loads show progress in the status bar.
 - **Very large** `.tex` files may be slow or hit browser memory limits.
 - **Complex packages** — same caveats as desktop `latexdiff` (see the [manual](http://mirrors.ctan.org/support/latexdiff/doc/latexdiff-man.pdf)).
 - This app **does not** replace `latexdiff-vc`, `latexrevise`, or citation-aware wrappers like [latexdiffcite](https://github.com/twilsonco/latexdiffcite).

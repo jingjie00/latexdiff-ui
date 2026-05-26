@@ -1,4 +1,11 @@
 import { WebPerlRunner } from "wasm-latex-tools";
+import { engineAssetUrl, getEngineCacheName } from "./engine-cache";
+import { restoreEngineFromIdbToCache, saveEngineBlob } from "./engine-store";
+import {
+  engineCacheHasAllFiles,
+  isServiceWorkerControlling,
+  registerEngineServiceWorker,
+} from "./register-sw";
 
 export type RunnerState = "idle" | "loading" | "ready" | "error";
 
@@ -24,6 +31,7 @@ const RUNTIME_START = 78;
 const RUNTIME_END = 96;
 const FETCH_TIMEOUT_MS = 90_000;
 const INIT_TIMEOUT_MS = 120_000;
+const CACHE_WAIT_MS = 120_000;
 
 let runner: WebPerlRunner | null = null;
 let state: RunnerState = "idle";
@@ -105,22 +113,30 @@ function setState(next: RunnerState) {
   }
 }
 
-/** Resolve asset paths to absolute URLs (fixes relative ./ on some hosts). */
-function resolveAssetUrl(relativePath: string): string {
-  const base = new URL(import.meta.env.BASE_URL, window.location.href);
-  return new URL(relativePath, base).href;
+function webperlUrl(file: string): string {
+  return engineAssetUrl(`core/webperl/${file}`);
 }
 
-function webperlUrl(file: string): string {
-  return resolveAssetUrl(`core/webperl/${file}`);
+function urlToAssetKey(url: string): string | null {
+  try {
+    const base = new URL(import.meta.env.BASE_URL, window.location.href);
+    const path = new URL(url).pathname;
+    const basePath = base.pathname.replace(/\/$/, "");
+    if (!path.startsWith(basePath)) {
+      return null;
+    }
+    return path.slice(basePath.length).replace(/^\//, "");
+  } catch {
+    return null;
+  }
 }
 
 function webperlBasePath(): string {
-  return resolveAssetUrl("core/webperl").replace(/\/$/, "");
+  return engineAssetUrl("core/webperl").replace(/\/$/, "");
 }
 
 function perlScriptsPath(): string {
-  return resolveAssetUrl("core/perl").replace(/\/$/, "");
+  return engineAssetUrl("core/perl").replace(/\/$/, "");
 }
 
 function formatBytes(n: number): string {
@@ -129,7 +145,7 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-async function fetchToCache(
+async function fetchAndStoreInCache(
   url: string,
   onBytes: (loaded: number, total: number) => void,
 ): Promise<void> {
@@ -149,19 +165,39 @@ async function fetchToCache(
     const body = res.body;
 
     if (!body || total <= 0) {
-      await res.arrayBuffer();
-      onBytes(1, 1);
+      const blob = await res.blob();
+      onBytes(blob.size, blob.size || 1);
+      if ("caches" in window) {
+        const cache = await caches.open(getEngineCacheName());
+        await cache.put(url, new Response(blob, { headers: res.headers }));
+      }
+      const assetKey = urlToAssetKey(url);
+      if (assetKey) {
+        await saveEngineBlob(assetKey, blob);
+      }
       return;
     }
 
     const reader = body.getReader();
+    const chunks: Uint8Array[] = [];
     let loaded = 0;
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      chunks.push(value);
       loaded += value.length;
       onBytes(loaded, total);
+    }
+
+    const blob = new Blob(chunks);
+    if ("caches" in window) {
+      const cache = await caches.open(getEngineCacheName());
+      await cache.put(url, new Response(blob, { headers: res.headers }));
+    }
+    const assetKey = urlToAssetKey(url);
+    if (assetKey) {
+      await saveEngineBlob(assetKey, blob);
     }
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
@@ -173,23 +209,8 @@ async function fetchToCache(
   }
 }
 
-async function verifyAssetsReachable(): Promise<void> {
-  const probe = webperlUrl("perlrunner.html");
-  logLoad(`HEAD ${probe}`);
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 15_000);
-  try {
-    const res = await fetch(probe, { method: "HEAD", signal: controller.signal });
-    if (!res.ok) {
-      throw new Error(`perlrunner.html not found (${res.status})`);
-    }
-    logLoad(`OK perlrunner.html (${res.status})`);
-  } finally {
-    window.clearTimeout(timer);
-  }
-}
-
-async function warmEngineAssets(): Promise<void> {
+/** Download engine files once into Cache API; service worker serves them same-origin afterward. */
+async function populateEngineCache(): Promise<void> {
   let completedWeight = 0;
   let skipped = 0;
 
@@ -198,20 +219,19 @@ async function warmEngineAssets(): Promise<void> {
     emitProgress({
       stage: "download",
       percent: (completedWeight / 100) * DOWNLOAD_WEIGHT,
-      message: `Prefetch ${file.name}`,
+      message: `Caching ${file.name}`,
       detail: url,
     });
     logLoad(`GET ${url}`);
 
     try {
-      await fetchToCache(url, (loaded, total) => {
+      await fetchAndStoreInCache(url, (loaded, total) => {
         const fileRatio = total > 0 ? loaded / total : 1;
         const overall = completedWeight + file.weight * fileRatio;
-        const pct = (overall / 100) * DOWNLOAD_WEIGHT;
         emitProgress({
           stage: "download",
-          percent: pct,
-          message: `Prefetch ${file.name}`,
+          percent: (overall / 100) * DOWNLOAD_WEIGHT,
+          message: `Caching ${file.name}`,
           detail: total > 0 ? `${formatBytes(loaded)} / ${formatBytes(total)}` : file.name,
         });
       });
@@ -226,17 +246,91 @@ async function warmEngineAssets(): Promise<void> {
   }
 
   if (skipped > 0) {
-    logLoad(`Prefetch skipped ${skipped}/${ENGINE_FILES.length} file(s) — continuing`);
+    logLoad(`Cache fill skipped ${skipped}/${ENGINE_FILES.length} file(s)`);
   } else {
-    logLoad("Prefetch complete");
+    logLoad("Engine files cached");
   }
 
   emitProgress({
     stage: "download",
     percent: DOWNLOAD_WEIGHT,
-    message: skipped > 0 ? "Prefetch partial — starting runtime" : "Prefetch complete",
+    message: skipped > 0 ? "Cache partial — starting runtime" : "Engine cached",
     detail: "",
   });
+}
+
+async function waitForEngineCache(): Promise<boolean> {
+  const deadline = Date.now() + CACHE_WAIT_MS;
+  while (Date.now() < deadline) {
+    if (await engineCacheHasAllFiles()) {
+      return true;
+    }
+    await new Promise((r) => window.setTimeout(r, 400));
+  }
+  return engineCacheHasAllFiles();
+}
+
+async function prepareEngineCache(): Promise<void> {
+  emitProgress({
+    stage: "download",
+    percent: 0,
+    message: "Preparing engine cache…",
+    detail: "",
+  });
+
+  logLoad("Registering service worker…");
+  const swReg = await registerEngineServiceWorker();
+  if (swReg) {
+    logLoad("Service worker registered (engine shipped with app, same-origin)");
+  } else {
+    logLoad("Service worker unavailable — using browser cache only");
+  }
+
+  if (await restoreEngineFromIdbToCache()) {
+    logLoad("Engine restored from local storage (no network)");
+    emitProgress({
+      stage: "download",
+      percent: DOWNLOAD_WEIGHT,
+      message: "Engine ready (local copy)",
+      detail: "IndexedDB",
+    });
+    return;
+  }
+
+  if (await engineCacheHasAllFiles()) {
+    logLoad(`Cache hit: ${getEngineCacheName()}`);
+    emitProgress({
+      stage: "download",
+      percent: DOWNLOAD_WEIGHT,
+      message: "Engine loaded from cache",
+      detail: isServiceWorkerControlling() ? "Service worker" : "Cache API",
+    });
+    return;
+  }
+
+  if (swReg?.installing || swReg?.waiting) {
+    emitProgress({
+      stage: "download",
+      percent: 5,
+      message: "Downloading engine (first visit)…",
+      detail: "Service worker caching",
+    });
+    logLoad("Waiting for service worker to cache engine files…");
+    const ready = await waitForEngineCache();
+    if (ready) {
+      logLoad("Service worker cache ready");
+      emitProgress({
+        stage: "download",
+        percent: DOWNLOAD_WEIGHT,
+        message: "Engine cached for offline use",
+        detail: "",
+      });
+      return;
+    }
+  }
+
+  logLoad("Populating cache via fetch…");
+  await populateEngineCache();
 }
 
 function createRunner(): WebPerlRunner {
@@ -256,21 +350,7 @@ async function initializeRunner(): Promise<WebPerlRunner> {
   logLoad(`Page: ${window.location.href}`);
   logLoad(`BASE_URL: ${import.meta.env.BASE_URL}`);
 
-  emitProgress({
-    stage: "download",
-    percent: 0,
-    message: "Checking engine files…",
-    detail: "",
-  });
-
-  try {
-    await verifyAssetsReachable();
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logLoad(`WARN asset check: ${msg}`);
-  }
-
-  await warmEngineAssets();
+  await prepareEngineCache();
 
   emitProgress({
     stage: "runtime",
