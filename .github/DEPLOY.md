@@ -1,31 +1,28 @@
 # GitHub Actions → Firebase Hosting
 
-## One-time setup (already done if you used `firebase init hosting:github`)
+## Setup
 
-1. [Firebase Console](https://console.firebase.google.com/project/latexdiff/hosting) — Hosting enabled on project **latexdiff**.
-2. GitHub repo **Settings → Secrets and variables → Actions** — secret **`FIREBASE_SERVICE_ACCOUNT_LATEXDIFF`** (JSON service account from Firebase).
-3. **Settings → Actions → General** — “Allow all actions and reusable workflows” (or allow Firebase actions).
+1. Firebase project **latexdiff** with Hosting enabled.
+2. GitHub secret **`FIREBASE_SERVICE_ACCOUNT_LATEXDIFF`** (service account JSON).
+3. Repo **Settings → Actions → General** → workflow permissions: **Read and write**.
 
-## What runs automatically
+## Workflows
 
-| Event | Workflow | Result |
-|--------|-----------|--------|
-| Push to `main` | `firebase-hosting-merge.yml` | Live site update |
-| Pull request | `firebase-hosting-pull-request.yml` | Preview URL on the PR |
+| File | Trigger | What it does |
+|------|---------|----------------|
+| `firebase-hosting-merge.yml` | Push to `main` | `npm ci` → `npm run build` → `firebase deploy` (live) |
+| `firebase-hosting-pull-request.yml` | Pull request | Same build → preview channel `pr-<number>` |
 
-## Enable workflows on GitHub
+We deploy **`dist/`** (Vite output) via the Firebase CLI — not `FirebaseExtended/action-hosting-deploy`, which can fail when GitHub cannot download that action from codeload.
 
-Workflow files live in `.github/workflows/`. They only appear under the **Actions** tab after you **push them to `main`**:
+## Manual deploy
 
 ```bash
-git add .github/workflows/
-git commit -m "Add Firebase Hosting GitHub Actions workflows"
-git push origin main
+npm ci && npm run build
+firebase deploy --only hosting --project latexdiff
 ```
 
-Then open: https://github.com/jingjie00/latexdiff-ui/actions
+## Verify
 
-## Check deploy worked
-
-- Green workflow run on your commit.
-- Footer on the live site shows **built … GMT** matching the run time.
+- [Actions tab](https://github.com/jingjie00/latexdiff-ui/actions) — green run
+- Live site footer — **built … GMT** matches deploy time

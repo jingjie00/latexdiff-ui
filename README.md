@@ -126,12 +126,12 @@ Deploy the **`dist/`** directory to any static host. Paths use Vite `base: "./"`
 
 ### Firebase Hosting (this repo)
 
-The project includes Firebase Web Frameworks config and GitHub Actions workflows:
+GitHub Actions workflows build `dist/` and deploy with the Firebase CLI:
 
 - `.github/workflows/firebase-hosting-merge.yml` — deploy on push to `main`
 - `.github/workflows/firebase-hosting-pull-request.yml` — preview channels for PRs
 
-Local Firebase project id: `latexdiff` (see `.firebaserc`).
+Local Firebase project id: `latexdiff` (see `.firebaserc`). Hosting serves the **`dist/`** folder (`firebase.json` → `"public": "dist"`).
 
 After each deploy, the page footer shows **built** with the date/time in **24-hour GMT** from when `npm run build` ran in CI. Use it to confirm the live site matches your latest GitHub push.
 
