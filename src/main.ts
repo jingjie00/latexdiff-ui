@@ -11,7 +11,9 @@ import { initBuildTime } from "./build-time";
 import { initLinkedPopovers } from "./popover";
 import { initOptionsPanel } from "./options-panel";
 import { initTheme } from "./theme";
-import { highlightLatexDiff } from "./diff-highlight";
+import { highlightLatexDiffAsync } from "./diff-highlight";
+import { yieldToMain } from "./async";
+import { countLines, isLargeForPreview } from "./large-doc";
 import { DEMO_NEW_LABEL, DEMO_OLD_LABEL, getDemoNew, getDemoOld } from "./samples";
 import {
   ensureRunner,
@@ -65,6 +67,8 @@ const trackedViewStack = document.getElementById("tracked-view-stack")!;
 const editors = [oldEditor, newEditor, trackedEditor];
 
 let trackedView: "source" | "preview" = "source";
+let previewRenderJob = 0;
+const columnsEl = document.querySelector(".columns") as HTMLElement;
 
 const refreshOldLines = wireLineNumbers(
   document.getElementById("old-line-numbers")!,
@@ -113,7 +117,7 @@ const trackedColumn: ColumnSetup = {
     updateActions();
     refreshTrackedLines();
     if (trackedView === "preview") {
-      renderTrackedPreview();
+      void renderTrackedPreviewAsync();
     }
   },
 };
@@ -214,19 +218,42 @@ function buildDiffOptions(): Partial<LatexDiffOptions> {
   return opts;
 }
 
-function renderTrackedPreview() {
+async function renderTrackedPreviewAsync(): Promise<void> {
+  const job = ++previewRenderJob;
   const text = trackedEditor.value;
+
   if (!text.trim()) {
     trackedPreview.innerHTML =
       '<span class="preview-empty">Generate diff to see colored \\DIFadd / \\DIFdel preview here.</span>';
     return;
   }
-  trackedPreview.innerHTML = highlightLatexDiff(text);
+
+  trackedPreview.innerHTML =
+    '<span class="preview-loading">Rendering preview…</span>';
+
+  try {
+    const html = await highlightLatexDiffAsync(text, (pct) => {
+      if (job !== previewRenderJob) return;
+      if (pct % 10 === 0) {
+        setStatus("loading", `Rendering preview… ${pct}%`);
+      }
+    });
+    if (job !== previewRenderJob) return;
+    trackedPreview.innerHTML = html;
+  } catch (err) {
+    if (job !== previewRenderJob) return;
+    const msg = err instanceof Error ? err.message : String(err);
+    trackedPreview.innerHTML = `<span class="preview-empty">Preview failed: ${msg}</span>`;
+  }
 }
 
-function setTrackedView(view: "source" | "preview") {
+function setTrackedView(view: "source" | "preview", options?: { refreshLines?: boolean }) {
   trackedView = view;
   const isPreview = view === "preview";
+
+  if (!isPreview) {
+    previewRenderJob += 1;
+  }
 
   trackedEditor.classList.toggle("hidden", isPreview);
   trackedPreview.classList.toggle("hidden", !isPreview);
@@ -240,9 +267,16 @@ function setTrackedView(view: "source" | "preview") {
   viewPreviewBtn.setAttribute("aria-selected", String(isPreview));
 
   if (isPreview) {
-    renderTrackedPreview();
+    void renderTrackedPreviewAsync();
   }
-  refreshTrackedLines();
+
+  if (options?.refreshLines !== false) {
+    refreshTrackedLines();
+  }
+}
+
+function setColumnsBusy(busy: boolean) {
+  columnsEl.classList.toggle("is-processing", busy);
 }
 
 runBtn.addEventListener("click", async () => {
@@ -255,6 +289,7 @@ runBtn.addEventListener("click", async () => {
 
   hideError();
   runBtn.classList.add("is-busy");
+  setColumnsBusy(true);
   const prevLabel = runBtn.textContent;
   runBtn.textContent =
     getRunnerState() === "ready" ? "Running…" : "Loading engine…";
@@ -267,9 +302,28 @@ runBtn.addEventListener("click", async () => {
     const latexDiff = new LatexDiff(activeRunner);
     const result = await latexDiff.diff(oldContent, newContent, buildDiffOptions());
 
-    setColumnContent(trackedColumn, result.output, "diff.tex (generated)");
-    setTrackedView("preview");
-    setStatus("ready", "Done — preview shows additions & deletions");
+    const output = result.output;
+    const lineCount = countLines(output);
+    const large = isLargeForPreview(output);
+
+    if (output.length > 80_000) {
+      setStatus("loading", "Applying result…");
+      await yieldToMain();
+    }
+    setColumnContent(trackedColumn, output, "diff.tex (generated)", { notify: false });
+    updateActions();
+    refreshTrackedLines();
+
+    if (large) {
+      setTrackedView("source", { refreshLines: false });
+      setStatus(
+        "ready",
+        `Done — ${lineCount} lines (source view; preview may be slow)`,
+      );
+    } else {
+      setTrackedView("preview", { refreshLines: false });
+      setStatus("ready", "Done — preview shows additions & deletions");
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     showError(msg);
@@ -278,6 +332,7 @@ runBtn.addEventListener("click", async () => {
   } finally {
     runBtn.textContent = prevLabel;
     runBtn.classList.remove("is-busy");
+    setColumnsBusy(false);
     updateActions();
   }
 });
@@ -337,7 +392,7 @@ viewPreviewBtn.addEventListener("click", () => setTrackedView("preview"));
 
 trackedEditor.addEventListener("input", () => {
   if (trackedView === "preview") {
-    renderTrackedPreview();
+    void renderTrackedPreviewAsync();
   }
 });
 

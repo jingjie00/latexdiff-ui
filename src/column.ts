@@ -32,13 +32,16 @@ export function setColumnContent(
   setup: ColumnSetup,
   content: string,
   sourceLabel?: string,
+  options?: { notify?: boolean },
 ) {
   setup.textarea.value = content;
   if (sourceLabel !== undefined) {
     setup.hint.textContent = sourceLabel;
     setup.hint.title = sourceLabel;
   }
-  setup.onChange?.();
+  if (options?.notify !== false) {
+    setup.onChange?.();
+  }
 }
 
 export function wireColumn(setup: ColumnSetup): void {
