@@ -1,7 +1,7 @@
 import { getEngineCacheName } from "./engine-cache";
 import { engineAssetUrl } from "./engine-cache";
 
-const DB_NAME = "latexdiff-engine-files";
+const DB_NAME = getEngineCacheName();
 const STORE_NAME = "blobs";
 const DB_VERSION = 1;
 
