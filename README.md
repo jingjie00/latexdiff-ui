@@ -4,7 +4,7 @@ A **browser-only** web app for comparing two LaTeX sources and producing a **tra
 
 Paste or drop your old and new `.tex` files, click **Generate**, then copy or download `diff.tex` and compile it locally. Everything runs on your machine inside the tab.
 
-**Live demo:** deploy from this repo (e.g. Firebase Hosting) · **Source:** [github.com/jingjie00/latexdiff-ui](https://github.com/jingjie00/latexdiff-ui)
+**Live demo:** [https://latexdiff.web.app/](https://latexdiff.web.app/)
 
 ---
 
