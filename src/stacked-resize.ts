@@ -169,8 +169,9 @@ export function initStackedResize(targets: StackedResizeTargets): () => void {
     (delta, start) => {
       const avail = Math.max(sourcesStack.clientHeight - RESIZER_PX, 1);
       const d = delta / avail;
-      let old = start.oldRow + d;
-      let neu = start.newRow - d;
+      /* Dragging down grows the panel below the handle (New). */
+      let old = start.oldRow - d;
+      let neu = start.newRow + d;
       if (old < MIN_FRAC) {
         neu -= MIN_FRAC - old;
         old = MIN_FRAC;

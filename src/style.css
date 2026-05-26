@@ -1090,6 +1090,7 @@ html[data-layout="stacked"] .swap-icon-v {
   overflow: hidden;
   border-right: 1px solid var(--border);
   background: var(--surface-2);
+  scrollbar-width: none;
 }
 
 .line-numbers {
@@ -1103,6 +1104,7 @@ html[data-layout="stacked"] .swap-icon-v {
   white-space: pre;
   user-select: none;
   opacity: 0.75;
+  box-sizing: border-box;
 }
 
 .editor-pane {
@@ -1259,6 +1261,8 @@ button.view-toggle-btn.is-active .view-toggle-tick {
   font-size: 0.77rem;
   line-height: 1.45;
   tab-size: 2;
+  white-space: pre;
+  overflow-x: auto;
 }
 
 .editor::placeholder {
