@@ -7,7 +7,7 @@ import { filenameFromHint, setDownloadEnabled, wireDownloadButton } from "./down
 import { wireLineNumbers } from "./line-numbers";
 import { wirePlainPaste } from "./paste";
 import { initBuildTime } from "./build-time";
-import { initPopover } from "./popover";
+import { initLinkedPopovers } from "./popover";
 import { initOptionsPanel } from "./options-panel";
 import { initTheme } from "./theme";
 import { highlightLatexDiff } from "./diff-highlight";
@@ -348,16 +348,18 @@ function onFilePaste(editor: HTMLTextAreaElement, file: File) {
 
 initBuildTime(document.getElementById("build-time")!);
 initTheme(themeToggle);
-initPopover(
-  document.querySelector(".tutorial-wrap")!,
-  document.getElementById("tutorial-btn") as HTMLButtonElement,
-  document.getElementById("tutorial-popover")!,
-);
-initPopover(
-  document.querySelector(".info-wrap")!,
-  document.getElementById("info-btn") as HTMLButtonElement,
-  document.getElementById("info-popover")!,
-);
+initLinkedPopovers([
+  {
+    wrap: document.querySelector(".tutorial-wrap")!,
+    toggleBtn: document.getElementById("tutorial-btn") as HTMLButtonElement,
+    popover: document.getElementById("tutorial-popover")!,
+  },
+  {
+    wrap: document.querySelector(".info-wrap")!,
+    toggleBtn: document.getElementById("info-btn") as HTMLButtonElement,
+    popover: document.getElementById("info-popover")!,
+  },
+]);
 initOptionsPanel(
   document.getElementById("options-panel")!,
   document.getElementById("options-toggle") as HTMLButtonElement,

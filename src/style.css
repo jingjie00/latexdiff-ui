@@ -217,10 +217,11 @@ button.demo-btn:hover:not(:disabled) {
   text-decoration: underline;
 }
 
-.popover-links {
-  font-size: 0.72rem;
-  padding-top: 0.15rem;
+.popover-about-dev {
+  margin-top: 0.35rem;
+  padding-top: 0.5rem;
   border-top: 1px solid var(--border);
+  font-size: 0.72rem;
 }
 
 .popover code {
@@ -572,7 +573,8 @@ button.secondary:hover:not(:disabled) {
 
 .columns {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* Old 30% · New 30% · Tracked 40% */
+  grid-template-columns: 3fr 3fr 4fr;
   gap: 0.55rem;
   flex: 1;
   min-height: 0;
