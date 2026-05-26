@@ -21,6 +21,12 @@ import { yieldToMain } from "./async";
 import { countLines, PREVIEW_AUTO_MAX_CHARS, PREVIEW_AUTO_MAX_LINES } from "./large-doc";
 import { DEMO_NEW_LABEL, DEMO_OLD_LABEL, getDemoNew, getDemoOld } from "./samples";
 import {
+  createLongLoadHint,
+  LONG_LOAD_ENGINE_MS,
+  LONG_LOAD_GENERATE_MS,
+  longLoadRefreshMessage,
+} from "./loading-hint";
+import {
   ensureRunner,
   getLoadError,
   getLoadLog,
@@ -109,6 +115,7 @@ let previewRenderJob = 0;
 const columnsEl = document.getElementById("workspace-editors") as HTMLElement;
 const generateOverlay = document.getElementById("generate-overlay") as HTMLElement;
 const generateOverlayDetail = document.getElementById("generate-overlay-detail")!;
+const loadStallHint = document.getElementById("load-stall-hint");
 const workspaceEl = document.querySelector(".workspace") as HTMLElement;
 const workspaceBodyEl = document.querySelector(".workspace-body") as HTMLElement;
 const sourcesStackEl = document.querySelector(".sources-stack") as HTMLElement;
@@ -207,6 +214,73 @@ const trackedColumn: ColumnSetup = {
   },
 };
 
+function hideLoadStallHint() {
+  if (!loadStallHint) return;
+  loadStallHint.textContent = "";
+  loadStallHint.classList.add("hidden");
+  statusBar.classList.remove("has-stall-hint");
+}
+
+function showLoadStallHint() {
+  if (!loadStallHint) return;
+  loadStallHint.textContent = longLoadRefreshMessage();
+  loadStallHint.classList.remove("hidden");
+  statusBar.classList.add("has-stall-hint");
+}
+
+let generateOverlayBaseDetail = "";
+let generateStallTimer: ReturnType<typeof setTimeout> | null = null;
+let generateStallShown = false;
+
+function renderGenerateOverlayDetail() {
+  generateOverlayDetail.replaceChildren();
+  if (!generateOverlayBaseDetail && !generateStallShown) return;
+
+  if (generateOverlayBaseDetail) {
+    generateOverlayDetail.appendChild(document.createTextNode(generateOverlayBaseDetail));
+  }
+
+  if (generateStallShown) {
+    if (generateOverlayBaseDetail) {
+      generateOverlayDetail.appendChild(document.createElement("br"));
+    }
+    const hint = document.createElement("span");
+    hint.className = "generate-overlay-stall-hint";
+    hint.textContent = longLoadRefreshMessage();
+    generateOverlayDetail.appendChild(hint);
+  }
+}
+
+function hideGenerateStallHint() {
+  generateStallShown = false;
+  if (generateStallTimer !== null) {
+    clearTimeout(generateStallTimer);
+    generateStallTimer = null;
+  }
+  renderGenerateOverlayDetail();
+}
+
+function showGenerateStallHint() {
+  generateStallShown = true;
+  generateStallTimer = null;
+  renderGenerateOverlayDetail();
+}
+
+function armGenerateStallHint() {
+  if (generateStallTimer !== null || generateStallShown) return;
+  generateStallTimer = window.setTimeout(showGenerateStallHint, LONG_LOAD_GENERATE_MS);
+}
+
+function disarmGenerateStallHint() {
+  hideGenerateStallHint();
+}
+
+const engineLoadStallHint = createLongLoadHint(
+  showLoadStallHint,
+  hideLoadStallHint,
+  LONG_LOAD_ENGINE_MS,
+);
+
 function setStatus(kind: "loading" | "ready" | "error", text: string) {
   statusBar.classList.remove("ready", "error");
   if (kind === "ready") statusBar.classList.add("ready");
@@ -249,8 +323,11 @@ function updateLoadProgressUI() {
     loadProgressPct.textContent = `${Math.round(p.percent)}%`;
     statusBar.title = logs.length > 0 ? logs.join("\n") : p.detail || p.message;
     setStatus("loading", line);
+    engineLoadStallHint.arm();
     return;
   }
+
+  engineLoadStallHint.disarm();
 
   loadProgress.classList.add("hidden");
   loadProgress.setAttribute("aria-hidden", "true");
@@ -367,7 +444,14 @@ function setGenerateBusy(busy: boolean, detail?: string) {
   generateOverlay.setAttribute("aria-hidden", String(!busy));
   generateOverlay.setAttribute("aria-busy", String(busy));
   if (detail !== undefined) {
-    generateOverlayDetail.textContent = detail;
+    generateOverlayBaseDetail = detail;
+    renderGenerateOverlayDetail();
+  }
+  if (busy) {
+    armGenerateStallHint();
+  } else {
+    disarmGenerateStallHint();
+    generateOverlayBaseDetail = "";
   }
 }
 
