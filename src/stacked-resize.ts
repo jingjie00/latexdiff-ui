@@ -169,9 +169,9 @@ export function initStackedResize(targets: StackedResizeTargets): () => void {
     (delta, start) => {
       const avail = Math.max(sourcesStack.clientHeight - RESIZER_PX, 1);
       const d = delta / avail;
-      /* Dragging down grows the panel below the handle (New). */
-      let old = start.oldRow - d;
-      let neu = start.newRow + d;
+      /* Dragging down grows the panel above the handle (Old). */
+      let old = start.oldRow + d;
+      let neu = start.newRow - d;
       if (old < MIN_FRAC) {
         neu -= MIN_FRAC - old;
         old = MIN_FRAC;
@@ -205,9 +205,9 @@ export function initStackedResize(targets: StackedResizeTargets): () => void {
     (delta, start) => {
       const avail = Math.max(editors.clientWidth - RESIZER_PX, 1);
       const d = delta / avail;
-      /* Dragging right grows the panel on the right (Tracked). */
-      let src = start.sources - d;
-      let trk = start.tracked + d;
+      /* Dragging right grows the panel on the left (sources), like editors|Options. */
+      let src = start.sources + d;
+      let trk = start.tracked - d;
       if (src < MIN_FRAC) {
         trk -= MIN_FRAC - src;
         src = MIN_FRAC;
