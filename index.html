@@ -400,34 +400,44 @@
                 <h2>Tracked Changes</h2>
                 <button type="button" id="run-btn" class="generate-btn">Generate</button>
               </div>
-              <div class="column-meta">
+              <div class="column-meta column-meta-tracked">
                 <span class="column-hint" id="tracked-hint">diff.tex</span>
-                <div class="view-toggle" role="tablist" aria-label="Tracked changes view">
-                  <button
-                    type="button"
-                    id="view-source-btn"
-                    class="view-toggle-btn is-active"
-                    role="tab"
-                    aria-selected="true"
-                    aria-controls="tracked-editor"
-                  >
-                    Source
-                  </button>
-                  <button
-                    type="button"
-                    id="view-preview-btn"
-                    class="view-toggle-btn"
-                    role="tab"
-                    aria-selected="false"
-                    aria-controls="tracked-preview"
-                  >
-                    Preview
-                  </button>
+                <div class="view-toggle-panel is-source" id="tracked-view-stack">
+                  <div class="view-toggle-tabs" role="tablist" aria-label="Tracked changes view">
+                    <button
+                      type="button"
+                      id="view-source-btn"
+                      class="view-toggle-btn is-active"
+                      role="tab"
+                      aria-selected="true"
+                      aria-controls="tracked-editor"
+                      title="Source"
+                    >
+                      <svg class="view-toggle-tick" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" />
+                      </svg>
+                      <span class="view-toggle-label">Src</span>
+                    </button>
+                    <button
+                      type="button"
+                      id="view-preview-btn"
+                      class="view-toggle-btn"
+                      role="tab"
+                      aria-selected="false"
+                      aria-controls="tracked-preview"
+                      title="Preview"
+                    >
+                      <svg class="view-toggle-tick" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" />
+                      </svg>
+                      <span class="view-toggle-label">Prev</span>
+                    </button>
+                  </div>
+                  <span class="preview-legend" id="preview-legend" aria-hidden="true">
+                    <span class="legend-del">Del</span>
+                    <span class="legend-add">Add</span>
+                  </span>
                 </div>
-                <span class="preview-legend hidden" id="preview-legend">
-                  <span class="legend-del">Deleted</span>
-                  <span class="legend-add">Added</span>
-                </span>
                 <button
                   type="button"
                   id="tracked-copy-btn"

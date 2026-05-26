@@ -59,6 +59,7 @@ const trackedPreview = document.getElementById("tracked-preview")!;
 const viewSourceBtn = document.getElementById("view-source-btn") as HTMLButtonElement;
 const viewPreviewBtn = document.getElementById("view-preview-btn") as HTMLButtonElement;
 const previewLegend = document.getElementById("preview-legend")!;
+const trackedViewStack = document.getElementById("tracked-view-stack")!;
 
 const editors = [oldEditor, newEditor, trackedEditor];
 
@@ -228,7 +229,9 @@ function setTrackedView(view: "source" | "preview") {
 
   trackedEditor.classList.toggle("hidden", isPreview);
   trackedPreview.classList.toggle("hidden", !isPreview);
-  previewLegend.classList.toggle("hidden", !isPreview);
+  trackedViewStack.classList.toggle("is-source", !isPreview);
+  trackedViewStack.classList.toggle("is-preview", isPreview);
+  previewLegend.setAttribute("aria-hidden", String(!isPreview));
 
   viewSourceBtn.classList.toggle("is-active", !isPreview);
   viewPreviewBtn.classList.toggle("is-active", isPreview);
