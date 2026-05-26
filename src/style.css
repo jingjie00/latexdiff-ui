@@ -1360,6 +1360,7 @@ button.view-toggle-btn.is-active .view-toggle-tick {
   padding: 0.45rem 0 0.55rem;
   font-size: 0.78rem;
   color: var(--muted);
+  line-height: 1.5;
 }
 
 .site-footer a {

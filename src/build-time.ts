@@ -17,7 +17,7 @@ export function initBuildTime(el: HTMLElement): void {
     hour12: false,
   });
 
-  el.textContent = ` · built ${gmt} GMT`;
+  el.textContent = ` · Built ${gmt} GMT`;
   el.title = `Build time (GMT): ${gmt}`;
   el.hidden = false;
 }
