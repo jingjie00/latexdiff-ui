@@ -1,5 +1,5 @@
 import { WebPerlRunner } from "wasm-latex-tools";
-import { engineAssetUrl, getEngineCacheName } from "./engine-cache";
+import { engineAssetUrl, getEngineCacheName, resolveAppBase } from "./engine-cache";
 import { restoreEngineFromIdbToCache, saveEngineBlob } from "./engine-store";
 import {
   engineCacheHasAllFiles,
@@ -119,7 +119,7 @@ function webperlUrl(file: string): string {
 
 function urlToAssetKey(url: string): string | null {
   try {
-    const base = new URL(import.meta.env.BASE_URL, window.location.href);
+    const base = resolveAppBase();
     const path = new URL(url).pathname;
     const basePath = base.pathname.replace(/\/$/, "");
     if (!path.startsWith(basePath)) {

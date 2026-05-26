@@ -1,4 +1,4 @@
-import { getEngineCacheName } from "./engine-cache";
+import { getEngineCacheName, resolveAppBase } from "./engine-cache";
 
 /** Register service worker so WebPerl assets are cached same-origin (no repeat CORS/network). */
 export async function registerEngineServiceWorker(): Promise<ServiceWorkerRegistration | null> {
@@ -6,8 +6,9 @@ export async function registerEngineServiceWorker(): Promise<ServiceWorkerRegist
     return null;
   }
 
-  const swUrl = new URL("sw.js", import.meta.env.BASE_URL).href;
-  const scope = new URL("./", import.meta.env.BASE_URL).href;
+  const base = resolveAppBase();
+  const swUrl = new URL("sw.js", base).href;
+  const scope = base.href;
 
   try {
     const registration = await navigator.serviceWorker.register(swUrl, { scope });
@@ -31,7 +32,7 @@ export async function engineCacheHasAllFiles(): Promise<boolean> {
   const keys = await cache.keys();
   const urls = new Set(keys.map((r) => r.url));
 
-  const base = new URL(import.meta.env.BASE_URL, window.location.href);
+  const base = resolveAppBase();
   const required = [
     "core/webperl/emperl.wasm",
     "core/webperl/emperl.data",
