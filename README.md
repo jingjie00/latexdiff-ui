@@ -133,7 +133,7 @@ The project includes Firebase Web Frameworks config and GitHub Actions workflows
 
 Local Firebase project id: `latexdiff` (see `.firebaserc`).
 
-After each deploy, the page footer shows **built** with the date/time from when `npm run build` ran in CI (hover for UTC). Use it to confirm the live site matches your latest GitHub push.
+After each deploy, the page footer shows **built** with the date/time in **24-hour GMT** from when `npm run build` ran in CI. Use it to confirm the live site matches your latest GitHub push.
 
 **Hosting tips for WebPerl:**
 
