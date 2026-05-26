@@ -2,7 +2,7 @@ import "./engine-bootstrap";
 import "./style.css";
 
 import { readDiffOptionsFromForm } from "./diff-options-form";
-import { runLatexdiff } from "./latexdiff-run";
+import { formatInputSize, runLatexdiff } from "./latexdiff-run";
 import { setColumnContent, wireColumn, type ColumnSetup } from "./column";
 import { setCopyEnabled, wireCopyButton } from "./copy";
 import { filenameFromHint, setDownloadEnabled, wireDownloadButton } from "./download";
@@ -17,7 +17,7 @@ import { clearStackedPaneStyles, initStackedResize } from "./stacked-resize";
 import { initTheme } from "./theme";
 import { highlightLatexDiffAsync } from "./diff-highlight";
 import { yieldToMain } from "./async";
-import { countLines, isLargeForPreview } from "./large-doc";
+import { countLines, PREVIEW_AUTO_MAX_CHARS, PREVIEW_AUTO_MAX_LINES } from "./large-doc";
 import { DEMO_NEW_LABEL, DEMO_OLD_LABEL, getDemoNew, getDemoOld } from "./samples";
 import {
   ensureRunner,
@@ -337,7 +337,13 @@ function setColumnsBusy(busy: boolean) {
   columnsEl.classList.toggle("is-processing", busy);
 }
 
+let generateInFlight = false;
+
 runBtn.addEventListener("click", async () => {
+  if (generateInFlight) {
+    return;
+  }
+
   const oldContent = oldEditor.value;
   const newContent = newEditor.value;
   if (!oldContent.trim() || !newContent.trim()) {
@@ -345,7 +351,9 @@ runBtn.addEventListener("click", async () => {
     return;
   }
 
+  generateInFlight = true;
   hideError();
+  runBtn.disabled = true;
   runBtn.classList.add("is-busy");
   setColumnsBusy(true);
   const prevLabel = runBtn.textContent;
@@ -356,7 +364,8 @@ runBtn.addEventListener("click", async () => {
   try {
     const activeRunner = await ensureRunner();
     runBtn.textContent = "Running…";
-    setStatus("ready", "Running latexdiff…");
+    const sizeHint = `${formatInputSize(oldContent.length)} · ${formatInputSize(newContent.length)}`;
+    setStatus("ready", `Running latexdiff… (${sizeHint})`);
     const result = await runLatexdiff(
       activeRunner,
       oldContent,
@@ -365,22 +374,27 @@ runBtn.addEventListener("click", async () => {
     );
 
     const output = result.output;
-    const lineCount = countLines(output);
-    const large = isLargeForPreview(output);
 
+    // Avoid multiple full scans of large strings (countLines is O(n)).
     if (output.length > 80_000) {
       setStatus("loading", "Applying result…");
       await yieldToMain();
     }
+    const lineCount = countLines(output);
+    const large =
+      output.length > PREVIEW_AUTO_MAX_CHARS || lineCount > PREVIEW_AUTO_MAX_LINES;
     setColumnContent(trackedColumn, output, "diff.tex (generated)", { notify: false });
     updateActions();
     refreshTrackedLines();
 
-    if (large) {
+    const skipAutoPreview =
+      large || lineCount > 55 || output.length > 28_000;
+
+    if (skipAutoPreview) {
       setTrackedView("source", { refreshLines: false });
       setStatus(
         "ready",
-        `Done — ${lineCount} lines (source view; preview may be slow)`,
+        `Done — ${lineCount} lines (source view; use Preview when ready)`,
       );
     } else {
       setTrackedView("preview", { refreshLines: false });
@@ -393,8 +407,10 @@ runBtn.addEventListener("click", async () => {
     statusDot.setAttribute("title", msg);
   } finally {
     runBtn.textContent = prevLabel;
+    runBtn.disabled = false;
     runBtn.classList.remove("is-busy");
     setColumnsBusy(false);
+    generateInFlight = false;
     updateActions();
   }
 });

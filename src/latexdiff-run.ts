@@ -1,4 +1,5 @@
 import type { LatexDiffOptions, ScriptResult, WebPerlRunner } from "wasm-latex-tools";
+import { markPerlRuntimeBusy, waitForPerlRuntimeReady } from "./runner";
 
 /** UI + CLI options passed to latexdiff (includes flags beyond wasm-latex-tools wrapper). */
 export interface AppDiffOptions {
@@ -77,6 +78,25 @@ export function buildLatexdiffCliArgs(
   return args;
 }
 
+const DIFF_TIMEOUT_MS = 120_000;
+
+function formatInputSize(chars: number): string {
+  if (chars < 1024) return `${chars} chars`;
+  if (chars < 1024 * 1024) return `${(chars / 1024).toFixed(1)} KB`;
+  return `${(chars / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function normalizeDiffFailure(result: ScriptResult): string {
+  const stderr = result.error?.trim();
+  if (stderr) {
+    const lines = stderr.split("\n").filter(Boolean);
+    const tail = lines.slice(-8).join("\n");
+    return tail.length > 600 ? `${tail.slice(0, 600)}…` : tail;
+  }
+  return `latexdiff failed (exit code ${result.exitCode ?? "unknown"})`;
+}
+
+/** Run latexdiff in WebPerl; throws on timeout, non-zero exit, or empty output. */
 export async function runLatexdiff(
   runner: WebPerlRunner,
   oldContent: string,
@@ -90,7 +110,10 @@ export async function runLatexdiff(
   const outputPath = `/tmp/diff_${t}.tex`;
   const args = buildLatexdiffCliArgs(oldPath, newPath, options);
 
-  return runner.runScript(
+  await waitForPerlRuntimeReady();
+  markPerlRuntimeBusy();
+
+  const runPromise = runner.runScript(
     args,
     [
       ...scripts,
@@ -99,4 +122,46 @@ export async function runLatexdiff(
     ],
     [outputPath],
   );
+
+  let timeoutId = 0;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(
+        new Error(
+          `latexdiff timed out after ${DIFF_TIMEOUT_MS / 1000}s (${formatInputSize(oldContent.length)} + ${formatInputSize(newContent.length)} input). Try smaller files or turn off heavy options.`,
+        ),
+      );
+    }, DIFF_TIMEOUT_MS);
+  });
+
+  let result: ScriptResult;
+  try {
+    result = await Promise.race([runPromise, timeoutPromise]);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("Timeout waiting for script execution")) {
+      throw new Error(
+        `Perl engine timed out (60s). Large or complex .tex can be slow in the browser — not a network ban. ${formatInputSize(oldContent.length)} + ${formatInputSize(newContent.length)} input.`,
+      );
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+
+  if (!result.success) {
+    throw new Error(normalizeDiffFailure(result));
+  }
+
+  if (!result.output.trim()) {
+    throw new Error(
+      "latexdiff finished but produced no output. Check that Old and New are valid LaTeX and try simpler options.",
+    );
+  }
+
+  await waitForPerlRuntimeReady();
+
+  return result;
 }
+
+export { formatInputSize };

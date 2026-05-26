@@ -108,7 +108,7 @@ export function highlightLatexDiff(source: string): string {
   return out;
 }
 
-const YIELD_EVERY_CHARS = 24_000;
+const YIELD_EVERY_CHARS = 8_000;
 
 /**
  * Same output as highlightLatexDiff but yields so the tab stays responsive on large diffs.

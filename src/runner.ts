@@ -37,6 +37,12 @@ let runner: WebPerlRunner | null = null;
 let state: RunnerState = "idle";
 let initPromise: Promise<WebPerlRunner> | null = null;
 let loadError: string | null = null;
+/** WebPerl iframe reloads after each script; must be Ready before the next run. */
+let perlRuntimeReady = false;
+let perlReadyWaiters: Array<{ resolve: () => void; reject: (err: Error) => void }> = [];
+let perlReadyListenerInstalled = false;
+
+const PERL_READY_TIMEOUT_MS = 45_000;
 const loadLog: string[] = [];
 let progress: LoadProgress = {
   stage: "download",
@@ -80,6 +86,63 @@ export function onLoadLogChange(cb: (lines: readonly string[]) => void): () => v
   logListeners.add(cb);
   cb(loadLog);
   return () => logListeners.delete(cb);
+}
+
+function installPerlReadyListener(): void {
+  if (perlReadyListenerInstalled) return;
+  perlReadyListenerInstalled = true;
+  window.addEventListener("message", (event) => {
+    const data = event.data as { perlRunnerState?: string } | null;
+    if (!data || typeof data !== "object") return;
+    if (data.perlRunnerState === "Ready") {
+      perlRuntimeReady = true;
+      const waiters = perlReadyWaiters;
+      perlReadyWaiters = [];
+      for (const w of waiters) {
+        w.resolve();
+      }
+    } else if (data.perlRunnerState === "Ended") {
+      perlRuntimeReady = false;
+    }
+  });
+}
+
+export function markPerlRuntimeBusy(): void {
+  perlRuntimeReady = false;
+}
+
+/** Wait until the hidden perlrunner iframe is Ready (it reloads after every script). */
+export function waitForPerlRuntimeReady(timeoutMs = PERL_READY_TIMEOUT_MS): Promise<void> {
+  installPerlReadyListener();
+  if (perlRuntimeReady) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const entry = {
+      resolve: () => {
+        window.clearTimeout(timer);
+        resolve();
+      },
+      reject: (err: Error) => {
+        window.clearTimeout(timer);
+        reject(err);
+      },
+    };
+    perlReadyWaiters.push(entry);
+
+    const timer = window.setTimeout(() => {
+      perlReadyWaiters = perlReadyWaiters.filter((w) => w !== entry);
+      reject(
+        new Error(
+          `Perl engine did not become ready within ${timeoutMs / 1000}s (it reloads after each diff). Try refreshing the page.`,
+        ),
+      );
+    }, timeoutMs);
+
+    const iframe = document.querySelector<HTMLIFrameElement>('iframe[name="perlrunner"]');
+    iframe?.contentWindow?.postMessage({ perlRunnerDiscovery: 1 }, "*");
+  });
 }
 
 function logLoad(line: string) {
@@ -371,8 +434,10 @@ async function initializeRunner(): Promise<WebPerlRunner> {
     }
     if (data.perlRunnerState === "Ready") {
       logLoad("perlRunnerState: Ready");
+      perlRuntimeReady = true;
     }
   };
+  installPerlReadyListener();
   window.addEventListener("message", perlMessageHandler);
 
   const tick = window.setInterval(() => {
@@ -399,6 +464,8 @@ async function initializeRunner(): Promise<WebPerlRunner> {
     logLoad("runner.initialize()…");
     await runner.initialize();
     logLoad("runner.initialize() done");
+    await waitForPerlRuntimeReady();
+    logLoad("perl runner Ready");
   } finally {
     window.clearTimeout(initTimer);
     window.clearInterval(tick);
