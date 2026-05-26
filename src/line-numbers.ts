@@ -1,29 +1,33 @@
+import { yieldToMain } from "./async";
 import { countLines } from "./large-doc";
 
-const VIEWPORT_BUFFER_LINES = 40;
+const CHUNK_LINES = 500;
 
-interface GutterMetrics {
-  lineHeight: number;
-  padTop: number;
-  padBottom: number;
-}
-
-function measureGutterMetrics(scrollEl: HTMLElement): GutterMetrics {
-  const cs = getComputedStyle(scrollEl);
-  const fontSize = parseFloat(cs.fontSize);
-  let lineHeight = parseFloat(cs.lineHeight);
-  if (!Number.isFinite(lineHeight)) {
-    lineHeight = Number.isFinite(fontSize) ? fontSize * 1.45 : 18;
+function buildLineNumberText(n: number): string {
+  if (n <= 0) return "1";
+  const parts = new Array<string>(n);
+  for (let i = 0; i < n; i++) {
+    parts[i] = String(i + 1);
   }
-  return {
-    lineHeight,
-    padTop: parseFloat(cs.paddingTop) || 0,
-    padBottom: parseFloat(cs.paddingBottom) || 0,
-  };
+  return parts.join("\n");
 }
 
-function fullGutterHeight(metrics: GutterMetrics, totalLines: number): number {
-  return metrics.padTop + metrics.padBottom + totalLines * metrics.lineHeight;
+async function buildLineNumberTextChunked(
+  n: number,
+  isStale: () => boolean,
+): Promise<string | null> {
+  const parts: string[] = [];
+  for (let start = 1; start <= n; start += CHUNK_LINES) {
+    if (isStale()) return null;
+    const end = Math.min(start + CHUNK_LINES - 1, n);
+    const chunk = new Array<string>(end - start + 1);
+    for (let i = start; i <= end; i++) {
+      chunk[i - start] = String(i);
+    }
+    parts.push(chunk.join("\n"));
+    await yieldToMain();
+  }
+  return parts.join("\n");
 }
 
 function activeScrollEl(scrollEls: HTMLElement[]): HTMLElement {
@@ -36,91 +40,36 @@ function activeScrollEl(scrollEls: HTMLElement[]): HTMLElement {
   return scrollEls[0]!;
 }
 
-function buildLineRange(start: number, end: number): string {
-  if (end < start) return "1";
-  const count = end - start + 1;
-  const parts = new Array<string>(count);
-  for (let i = 0; i < count; i++) {
-    parts[i] = String(start + i);
-  }
-  return parts.join("\n");
-}
-
-function visibleLineRange(
-  metrics: GutterMetrics,
-  totalLines: number,
-  scrollTop: number,
-  clientHeight: number,
-): { start: number; end: number } {
-  if (totalLines <= 0) {
-    return { start: 1, end: 1 };
-  }
-
-  const firstVisible = Math.max(
-    1,
-    Math.floor((scrollTop - metrics.padTop) / metrics.lineHeight) + 1,
-  );
-  const lastVisible = Math.min(
-    totalLines,
-    Math.ceil((scrollTop + clientHeight - metrics.padTop) / metrics.lineHeight) + 1,
-  );
-
-  return {
-    start: Math.max(1, firstVisible - VIEWPORT_BUFFER_LINES),
-    end: Math.min(totalLines, lastVisible + VIEWPORT_BUFFER_LINES),
-  };
-}
-
-/** Sync a line-number gutter with one or more scrollable editors. */
+/** Sync a line-number gutter with one or more scrollable editors. Returns a manual refresh fn. */
 export function wireLineNumbers(
   gutter: HTMLElement,
   getText: () => string,
   ...scrollEls: HTMLElement[]
 ): () => void {
   const gutterWrap = gutter.parentElement as HTMLElement;
-  let totalLines = 1;
   let refreshGen = 0;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  let rafId = 0;
 
-  function renderVisible(forceMetrics = false): void {
+  function syncScroll(): void {
     if (scrollEls.length === 0) return;
-
-    const scrollEl = activeScrollEl(scrollEls);
-    const metrics = measureGutterMetrics(scrollEl);
-    const range = visibleLineRange(
-      metrics,
-      totalLines,
-      scrollEl.scrollTop,
-      scrollEl.clientHeight,
-    );
-
-    gutter.style.boxSizing = "border-box";
-    gutter.style.minHeight = `${fullGutterHeight(metrics, totalLines)}px`;
-    gutter.style.paddingTop = `${metrics.padTop + (range.start - 1) * metrics.lineHeight}px`;
-    gutter.style.paddingBottom = `${metrics.padBottom}px`;
-    gutter.textContent = buildLineRange(range.start, range.end);
-
-    if (forceMetrics) {
-      gutterWrap.scrollTop = scrollEl.scrollTop;
-    }
+    gutterWrap.scrollTop = activeScrollEl(scrollEls).scrollTop;
   }
 
-  function scheduleRender(forceMetrics = false): void {
-    if (rafId) {
-      cancelAnimationFrame(rafId);
-    }
-    rafId = requestAnimationFrame(() => {
-      rafId = 0;
-      renderVisible(forceMetrics);
-    });
-  }
-
-  async function refreshLineCount(): Promise<void> {
+  async function refreshNow(): Promise<void> {
     const gen = ++refreshGen;
-    totalLines = countLines(getText());
-    if (gen !== refreshGen) return;
-    scheduleRender(true);
+    const n = countLines(getText());
+
+    let text: string | null;
+    if (n > CHUNK_LINES) {
+      text = await buildLineNumberTextChunked(n, () => gen !== refreshGen);
+    } else {
+      text = buildLineNumberText(n);
+    }
+
+    if (gen !== refreshGen || text === null) return;
+
+    gutter.textContent = text;
+    syncScroll();
   }
 
   function scheduleRefresh(): void {
@@ -129,35 +78,23 @@ export function wireLineNumbers(
     }
     debounceTimer = window.setTimeout(() => {
       debounceTimer = null;
-      void refreshLineCount();
-    }, 80);
+      void refreshNow();
+    }, 50);
   }
 
   for (const el of scrollEls) {
-    el.addEventListener("scroll", () => {
-      gutterWrap.scrollTop = el.scrollTop;
-      scheduleRender();
-    });
+    el.addEventListener("scroll", syncScroll);
     el.addEventListener("input", scheduleRefresh);
   }
 
-  const ro = new ResizeObserver(() => scheduleRender(true));
+  const ro = new ResizeObserver(() => syncScroll());
   for (const el of scrollEls) {
     ro.observe(el);
   }
 
-  void refreshLineCount();
+  void refreshNow();
 
   return () => {
-    ro.disconnect();
-    if (debounceTimer !== null) {
-      window.clearTimeout(debounceTimer);
-    }
-    if (rafId) {
-      cancelAnimationFrame(rafId);
-    }
-    gutter.style.minHeight = "";
-    gutter.style.paddingTop = "";
-    gutter.style.paddingBottom = "";
+    void refreshNow();
   };
 }

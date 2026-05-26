@@ -103,6 +103,8 @@ const editors = [oldEditor, newEditor, trackedEditor];
 let trackedView: "source" | "preview" = "source";
 let previewRenderJob = 0;
 const columnsEl = document.getElementById("workspace-editors") as HTMLElement;
+const generateOverlay = document.getElementById("generate-overlay") as HTMLElement;
+const generateOverlayDetail = document.getElementById("generate-overlay-detail")!;
 const workspaceEl = document.querySelector(".workspace") as HTMLElement;
 const workspaceBodyEl = document.querySelector(".workspace-body") as HTMLElement;
 const sourcesStackEl = document.querySelector(".sources-stack") as HTMLElement;
@@ -293,7 +295,11 @@ async function renderTrackedPreviewAsync(): Promise<void> {
     const html = await highlightLatexDiffAsync(text, (pct) => {
       if (job !== previewRenderJob) return;
       if (pct % 10 === 0) {
-        setStatus("loading", `Rendering preview… ${pct}%`);
+        const detail = `Rendering preview… ${pct}%`;
+        setStatus("loading", detail);
+        if (generateInFlight) {
+          setGenerateBusy(true, detail);
+        }
       }
     });
     if (job !== previewRenderJob) return;
@@ -305,7 +311,10 @@ async function renderTrackedPreviewAsync(): Promise<void> {
   }
 }
 
-function setTrackedView(view: "source" | "preview", options?: { refreshLines?: boolean }) {
+function setTrackedView(
+  view: "source" | "preview",
+  options?: { refreshLines?: boolean },
+): Promise<void> {
   trackedView = view;
   const isPreview = view === "preview";
 
@@ -325,16 +334,31 @@ function setTrackedView(view: "source" | "preview", options?: { refreshLines?: b
   viewPreviewBtn.setAttribute("aria-selected", String(isPreview));
 
   if (isPreview) {
-    void renderTrackedPreviewAsync();
+    if (options?.refreshLines !== false) {
+      refreshTrackedLines();
+    }
+    return renderTrackedPreviewAsync();
   }
 
   if (options?.refreshLines !== false) {
     refreshTrackedLines();
   }
+  return Promise.resolve();
 }
 
 function setColumnsBusy(busy: boolean) {
   columnsEl.classList.toggle("is-processing", busy);
+}
+
+function setGenerateBusy(busy: boolean, detail?: string) {
+  setColumnsBusy(busy);
+  document.body.classList.toggle("is-generating", busy);
+  generateOverlay.classList.toggle("hidden", !busy);
+  generateOverlay.setAttribute("aria-hidden", String(!busy));
+  generateOverlay.setAttribute("aria-busy", String(busy));
+  if (detail !== undefined) {
+    generateOverlayDetail.textContent = detail;
+  }
 }
 
 let generateInFlight = false;
@@ -355,17 +379,22 @@ runBtn.addEventListener("click", async () => {
   hideError();
   runBtn.disabled = true;
   runBtn.classList.add("is-busy");
-  setColumnsBusy(true);
   const prevLabel = runBtn.textContent;
   runBtn.textContent =
     getRunnerState() === "ready" ? "Running…" : "Loading engine…";
+  setGenerateBusy(true, "Preparing latexdiff…");
   setStatus("loading", "Preparing latexdiff…");
+  await yieldToMain();
 
   try {
     const activeRunner = await ensureRunner();
     runBtn.textContent = "Running…";
     const sizeHint = `${formatInputSize(oldContent.length)} · ${formatInputSize(newContent.length)}`;
-    setStatus("ready", `Running latexdiff… (${sizeHint})`);
+    const runningDetail = `Running latexdiff in browser (${sizeHint})…`;
+    setGenerateBusy(true, runningDetail);
+    setStatus("loading", runningDetail);
+    await yieldToMain();
+
     const result = await runLatexdiff(
       activeRunner,
       oldContent,
@@ -375,29 +404,33 @@ runBtn.addEventListener("click", async () => {
 
     const output = result.output;
 
-    // Avoid multiple full scans of large strings (countLines is O(n)).
-    if (output.length > 80_000) {
-      setStatus("loading", "Applying result…");
-      await yieldToMain();
-    }
+    setGenerateBusy(true, "Applying result…");
+    setStatus("loading", "Applying result…");
+    await yieldToMain();
+
     const lineCount = countLines(output);
     const large =
       output.length > PREVIEW_AUTO_MAX_CHARS || lineCount > PREVIEW_AUTO_MAX_LINES;
     setColumnContent(trackedColumn, output, "diff.tex (generated)", { notify: false });
     updateActions();
+    await yieldToMain();
     refreshTrackedLines();
+    await yieldToMain();
 
     const skipAutoPreview =
       large || lineCount > 55 || output.length > 28_000;
 
     if (skipAutoPreview) {
-      setTrackedView("source", { refreshLines: false });
+      await setTrackedView("source", { refreshLines: false });
       setStatus(
         "ready",
         `Done — ${lineCount} lines (source view; use Preview when ready)`,
       );
     } else {
-      setTrackedView("preview", { refreshLines: false });
+      setGenerateBusy(true, "Rendering preview…");
+      setStatus("loading", "Rendering preview…");
+      await yieldToMain();
+      await setTrackedView("preview", { refreshLines: false });
       setStatus("ready", "Done — preview shows additions & deletions");
     }
   } catch (err) {
@@ -409,7 +442,7 @@ runBtn.addEventListener("click", async () => {
     runBtn.textContent = prevLabel;
     runBtn.disabled = false;
     runBtn.classList.remove("is-busy");
-    setColumnsBusy(false);
+    setGenerateBusy(false);
     generateInFlight = false;
     updateActions();
   }
