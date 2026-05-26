@@ -241,6 +241,21 @@
               </button>
               <button
                 type="button"
+                id="old-wrap-btn"
+                class="header-icon-btn icon-btn secondary wrap-toggle"
+                aria-label="Word wrap on"
+                aria-pressed="true"
+                title="Word wrap on"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M4 5h16v2H4V5zm0 4h10v2H4V9zm0 4h16v2H4v-2zm0 4h10v2H4v-2zm12.59 1.41L19 18.83V15h2v7h-7v-2h3.83l-2.58-2.59 1.41-1.41z"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
                 id="old-copy-btn"
                 class="header-icon-btn icon-btn secondary"
                 aria-label="Copy to clipboard"
@@ -274,13 +289,13 @@
           <div class="editor-wrap" data-drop-target>
             <div class="editor-body">
               <div class="line-gutter" aria-hidden="true">
-                <pre class="line-numbers" id="old-line-numbers">1</pre>
+                <div class="line-numbers" id="old-line-numbers">1</div>
               </div>
               <div class="editor-pane">
                 <textarea
                   id="old-editor"
                   class="editor"
-                  wrap="off"
+                  wrap="soft"
                   spellcheck="false"
                   autocomplete="off"
                   autocorrect="off"
@@ -313,6 +328,21 @@
                   <path
                     fill="currentColor"
                     d="M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3zM9 3L5 6.99h3V14h2V6.99h3L9 3z"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                id="new-wrap-btn"
+                class="header-icon-btn icon-btn secondary wrap-toggle"
+                aria-label="Word wrap on"
+                aria-pressed="true"
+                title="Word wrap on"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M4 5h16v2H4V5zm0 4h10v2H4V9zm0 4h16v2H4v-2zm0 4h10v2H4v-2zm12.59 1.41L19 18.83V15h2v7h-7v-2h3.83l-2.58-2.59 1.41-1.41z"
                   />
                 </svg>
               </button>
@@ -351,13 +381,13 @@
           <div class="editor-wrap" data-drop-target>
             <div class="editor-body">
               <div class="line-gutter" aria-hidden="true">
-                <pre class="line-numbers" id="new-line-numbers">1</pre>
+                <div class="line-numbers" id="new-line-numbers">1</div>
               </div>
               <div class="editor-pane">
                 <textarea
                   id="new-editor"
                   class="editor"
-                  wrap="off"
+                  wrap="soft"
                   spellcheck="false"
                   autocomplete="off"
                   autocorrect="off"
@@ -417,6 +447,21 @@
                 </div>
                 <button
                   type="button"
+                  id="tracked-wrap-btn"
+                  class="header-icon-btn icon-btn secondary wrap-toggle"
+                  aria-label="Word wrap on"
+                  aria-pressed="true"
+                  title="Word wrap on"
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M4 5h16v2H4V5zm0 4h10v2H4V9zm0 4h16v2H4v-2zm0 4h10v2H4v-2zm12.59 1.41L19 18.83V15h2v7h-7v-2h3.83l-2.58-2.59 1.41-1.41z"
+                    />
+                  </svg>
+                </button>
+                <button
+                  type="button"
                   id="tracked-copy-btn"
                   class="header-icon-btn icon-btn secondary"
                   aria-label="Copy to clipboard"
@@ -451,13 +496,13 @@
           <div class="editor-wrap" data-drop-target>
             <div class="editor-body">
               <div class="line-gutter" aria-hidden="true">
-                <pre class="line-numbers" id="tracked-line-numbers">1</pre>
+                <div class="line-numbers" id="tracked-line-numbers">1</div>
               </div>
               <div class="editor-pane">
                 <textarea
                   id="tracked-editor"
                   class="editor"
-                  wrap="off"
+                  wrap="soft"
                   spellcheck="false"
                   autocomplete="off"
                   autocorrect="off"

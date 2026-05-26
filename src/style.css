@@ -1192,6 +1192,39 @@ html[data-layout="stacked"] .swap-icon-v {
   display: block;
 }
 
+.line-numbers.is-wrapped {
+  white-space: normal;
+  padding-top: 0.6rem;
+  padding-bottom: 0.6rem;
+}
+
+.line-number-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  box-sizing: border-box;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.editor-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  height: auto;
+  max-height: none;
+  overflow: hidden;
+  z-index: -1;
+}
+
+.wrap-toggle.is-active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
 .editor-pane {
   position: relative;
   flex: 1;
@@ -1348,6 +1381,13 @@ button.view-toggle-btn.is-active .view-toggle-tick {
   tab-size: 2;
   white-space: pre;
   overflow-x: auto;
+}
+
+.editor.is-wrap {
+  white-space: pre-wrap;
+  overflow-x: hidden;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .editor::placeholder {

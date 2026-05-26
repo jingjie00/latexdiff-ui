@@ -7,6 +7,7 @@ import { setColumnContent, wireColumn, type ColumnSetup } from "./column";
 import { setCopyEnabled, wireCopyButton } from "./copy";
 import { filenameFromHint, setDownloadEnabled, wireDownloadButton } from "./download";
 import { wireLineNumbers } from "./line-numbers";
+import { isEditorWrapEnabled, onEditorWrapChange, wireWrapToggles } from "./editor-wrap";
 import { wirePlainPaste } from "./paste";
 import { initBuildTime } from "./build-time";
 import { initLinkedPopovers } from "./popover";
@@ -73,6 +74,9 @@ const diffOptionsForm = {
   excludeTextcmd,
 };
 const runBtn = document.getElementById("run-btn") as HTMLButtonElement;
+const oldWrapBtn = document.getElementById("old-wrap-btn") as HTMLButtonElement;
+const newWrapBtn = document.getElementById("new-wrap-btn") as HTMLButtonElement;
+const trackedWrapBtn = document.getElementById("tracked-wrap-btn") as HTMLButtonElement;
 const oldCopyBtn = document.getElementById("old-copy-btn") as HTMLButtonElement;
 const newCopyBtn = document.getElementById("new-copy-btn") as HTMLButtonElement;
 const trackedCopyBtn = document.getElementById("tracked-copy-btn") as HTMLButtonElement;
@@ -149,17 +153,23 @@ const refreshOldLines = wireLineNumbers(
   document.getElementById("old-line-numbers")!,
   () => oldEditor.value,
   oldEditor,
+  isEditorWrapEnabled,
+  oldEditor,
 );
 
 const refreshNewLines = wireLineNumbers(
   document.getElementById("new-line-numbers")!,
   () => newEditor.value,
   newEditor,
+  isEditorWrapEnabled,
+  newEditor,
 );
 
 const refreshTrackedLines = wireLineNumbers(
   document.getElementById("tracked-line-numbers")!,
   () => trackedEditor.value,
+  trackedEditor,
+  isEditorWrapEnabled,
   trackedEditor,
   trackedPreview,
 );
@@ -574,6 +584,12 @@ initLinkedPopovers([
   },
 ]);
 wirePlainPaste(editors, onFilePaste);
+wireWrapToggles(editors, [oldWrapBtn, newWrapBtn, trackedWrapBtn]);
+onEditorWrapChange(() => {
+  refreshOldLines();
+  refreshNewLines();
+  refreshTrackedLines();
+});
 wireColumn(oldColumn);
 wireColumn(newColumn);
 wireColumn(trackedColumn);
