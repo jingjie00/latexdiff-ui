@@ -89,6 +89,167 @@ body {
   gap: 0.55rem;
 }
 
+.workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 0.55rem;
+}
+
+.workspace-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  gap: 0.45rem;
+}
+
+/* Default: Old+New stacked | Tracked | Options sidebar */
+html[data-layout="stacked"] .workspace {
+  flex-direction: row;
+}
+
+html[data-layout="stacked"] .workspace-body {
+  flex: 1;
+}
+
+html[data-layout="stacked"] .workspace {
+  gap: 0;
+}
+
+html[data-layout="stacked"] .workspace-editors {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  gap: 0;
+  position: relative;
+}
+
+html[data-layout="stacked"] .sources-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  min-height: 0;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+html[data-layout="stacked"] .sources-stack .column,
+html[data-layout="stacked"] .workspace-editors > .column {
+  min-width: 0;
+  min-height: 0;
+  flex-shrink: 0;
+}
+
+html[data-layout="stacked"] .workspace > .options-panel {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.row-resizer {
+  flex: 0 0 6px;
+  height: 6px;
+  width: 100%;
+  margin: 1px 0;
+  align-self: stretch;
+  cursor: row-resize;
+  touch-action: none;
+  border-radius: 3px;
+  background: transparent;
+  transition: background 0.12s;
+  z-index: 4;
+}
+
+.row-resizer:hover,
+.row-resizer.is-active,
+.row-resizer:focus-visible {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: none;
+}
+
+body.row-resizing {
+  cursor: row-resize !important;
+  user-select: none;
+}
+
+body.row-resizing * {
+  cursor: row-resize !important;
+}
+
+html[data-layout="stacked"] .options-panel .options-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+html[data-layout="stacked"] .options-grid {
+  grid-template-columns: 1fr;
+}
+
+html[data-layout="stacked"] .options-heading {
+  display: block;
+}
+
+html[data-layout="stacked"] .options-toggle,
+html[data-layout="stacked"] .options-summary {
+  display: none !important;
+}
+
+html[data-layout="stacked"] .options-panel.options-panel-fixed {
+  border-top: 3px solid var(--text);
+}
+
+html[data-layout="stacked"] .options-panel.options-panel-fixed .options-header {
+  border-bottom-color: var(--border);
+}
+
+html[data-layout="stacked"] .options-panel.options-panel-fixed .options-body {
+  display: block !important;
+}
+
+html[data-layout="classic"] .options-heading {
+  display: none;
+}
+
+/* Classic: options on top, three columns in a row */
+html[data-layout="classic"] .workspace {
+  flex-direction: column;
+}
+
+html[data-layout="classic"] .workspace > .options-panel {
+  flex-shrink: 0;
+  order: -1;
+}
+
+html[data-layout="classic"] .sources-stack {
+  display: contents;
+}
+
+html[data-layout="classic"] .workspace-editors {
+  flex: 1;
+  min-height: 0;
+}
+
+.layout-icon {
+  display: none;
+}
+
+html[data-layout="stacked"] .layout-icon-classic {
+  display: block;
+}
+
+html[data-layout="classic"] .layout-icon-stacked {
+  display: block;
+}
+
 .top-bar {
   display: flex;
   flex-wrap: wrap;
@@ -117,12 +278,42 @@ body {
   min-width: 0;
 }
 
-.brand h1 {
+.brand h1,
+.brand-title {
   margin: 0;
   font-size: 1.15rem;
   font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.3;
+}
+
+/* \LaTeX logo — matches familiar PDF / \LaTeX{} output */
+.brand-title .tex-latex {
+  font-family: "Latin Modern Roman", "Computer Modern", "Times New Roman", Times, serif;
+  font-weight: 400;
+  letter-spacing: -0.04em;
+}
+
+.brand-title .tex-A {
+  font-size: 0.62em;
+  vertical-align: 0.3em;
+  margin-left: -0.15em;
+  margin-right: -0.02em;
+}
+
+.brand-title .tex-E {
+  font-size: 0.62em;
+  vertical-align: -0.24em;
+  margin-left: -0.12em;
+}
+
+.brand-title .tex-different {
+  margin-left: 0.06em;
+}
+
+.brand-title .brand-sub {
+  font-weight: 550;
+  color: var(--muted);
 }
 
 .tagline-row {
@@ -151,6 +342,11 @@ button.demo-btn {
 button.demo-btn:hover:not(:disabled) {
   background: var(--surface-2);
   color: var(--accent-hover);
+}
+
+button#reset-btn:hover:not(:disabled) {
+  color: var(--danger, #c62828);
+  border-color: color-mix(in srgb, var(--danger, #c62828) 40%, var(--border));
 }
 
 .toolbar {
@@ -366,11 +562,17 @@ button.demo-btn:hover:not(:disabled) {
 
 .options-header {
   display: flex;
-  align-items: center;
+  align-items: baseline;
+  justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.4rem 0.65rem;
-  background: var(--surface-2);
-  border-bottom: 1px solid transparent;
+}
+
+.options-heading {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+  flex-shrink: 0;
 }
 
 .options-panel:not(.is-collapsed) .options-header {
@@ -477,7 +679,8 @@ button.options-toggle:hover:not(:disabled) .options-chevron {
   font-size: 0.68rem;
 }
 
-.opt select {
+.opt select,
+.opt input[type="text"] {
   width: 100%;
   background: var(--editor-bg);
   color: var(--text);
@@ -485,6 +688,44 @@ button.options-toggle:hover:not(:disabled) .options-chevron {
   border-radius: 6px;
   padding: 0.3rem 0.4rem;
   font-size: 0.75rem;
+}
+
+.opt input[type="text"]::placeholder {
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+.opt-wide {
+  grid-column: 1 / -1;
+}
+
+.options-advanced {
+  margin-top: 0.55rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+  font-size: 0.78rem;
+}
+
+.options-advanced summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text);
+  user-select: none;
+}
+
+.options-advanced summary:hover {
+  color: var(--accent-hover);
+}
+
+.options-advanced-hint {
+  margin: 0.35rem 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.options-grid-advanced {
+  margin-top: 0.25rem;
 }
 
 .opt-checks {
@@ -572,21 +813,50 @@ button.secondary:hover:not(:disabled) {
 }
 
 .columns {
-  display: grid;
-  /* Old 30% · New 30% · Tracked 40% */
-  grid-template-columns: 3fr 3fr 4fr;
-  gap: 0.55rem;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
   flex: 1;
   min-height: 0;
   position: relative;
 }
 
-.columns.is-processing {
+.col-resizer {
+  flex: 0 0 6px;
+  width: 6px;
+  margin: 0 1px;
+  align-self: stretch;
+  cursor: col-resize;
+  touch-action: none;
+  border-radius: 3px;
+  background: transparent;
+  transition: background 0.12s;
+  z-index: 4;
+}
+
+.col-resizer:hover,
+.col-resizer.is-active,
+.col-resizer:focus-visible {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: none;
+}
+
+body.col-resizing {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+body.col-resizing * {
+  cursor: col-resize !important;
+}
+
+.workspace-editors.is-processing {
   pointer-events: none;
   opacity: 0.92;
 }
 
-.columns.is-processing::after {
+.workspace-editors.is-processing::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -601,6 +871,18 @@ button.secondary:hover:not(:disabled) {
   margin: 0;
   padding: 0;
   flex-shrink: 0;
+}
+
+.swap-icon-v {
+  display: none;
+}
+
+html[data-layout="stacked"] .swap-icon-h {
+  display: none;
+}
+
+html[data-layout="stacked"] .swap-icon-v {
+  display: block;
 }
 
 .swap-btn:hover:not(:disabled) {
@@ -1111,9 +1393,208 @@ button.view-toggle-btn.is-active .view-toggle-tick {
 }
 
 @media (max-width: 900px) {
-  .columns {
-    grid-template-columns: 1fr;
-    grid-template-rows: repeat(3, minmax(180px, 1fr));
+  #layout-toggle {
+    display: none !important;
+  }
+
+  .top-bar {
+    align-items: stretch;
+    gap: 0.45rem;
+  }
+
+  .toolbar {
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    width: 100%;
+    min-width: 0;
+    gap: 0.3rem;
+  }
+
+  .status-bar {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.72rem;
+  }
+
+  #status-text {
+    min-width: 0;
+  }
+
+  .load-progress {
+    flex: 0 0 2.5rem;
+  }
+
+  .load-progress-pct {
+    font-size: 0.62rem;
+  }
+
+  .toolbar .icon-btn {
+    width: 1.9rem;
+    height: 1.9rem;
+    flex-shrink: 0;
+  }
+
+  .column-header {
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+    padding: 0.4rem 0.45rem;
+    min-width: 0;
+  }
+
+  .column-header h2 {
+    flex-shrink: 0;
+    font-size: 0.82rem;
+  }
+
+  .column-meta {
+    flex-wrap: nowrap;
+    flex-shrink: 1;
+    min-width: 0;
+    gap: 0.25rem;
+  }
+
+  .column-output .column-meta,
+  .column-meta-tracked {
+    flex-wrap: nowrap;
+  }
+
+  .column-hint {
+    max-width: 3.25rem;
+    font-size: 0.65rem;
+  }
+
+  .column-meta .column-hint {
+    max-width: 2.75rem;
+  }
+
+  .swap-btn,
+  .header-icon-btn {
+    width: 1.5rem;
+    height: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  .column-header-tracked .column-title-row {
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .column-title-group {
+    flex-wrap: nowrap;
+    flex-shrink: 1;
+    min-width: 0;
+    gap: 0.3rem;
+  }
+
+  .column-title-group h2 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 6.5rem;
+  }
+
+  .generate-btn {
+    padding: 0.32rem 0.6rem;
+    font-size: 0.72rem;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .column-meta-tracked {
+    flex-shrink: 0;
+  }
+
+  .view-toggle-panel {
+    --view-control-h: 1.5rem;
+    padding: 0 2px;
+    flex-shrink: 0;
+    grid-template-rows: 1fr;
+  }
+
+  .view-toggle-panel .preview-legend {
+    display: none;
+  }
+
+  .view-toggle-tabs {
+    height: 100%;
+  }
+
+  button.view-toggle-btn {
+    padding: 0 0.22rem;
+    font-size: 0.52rem;
+  }
+
+  .options-header {
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .options-summary {
+    max-width: min(12rem, 40vw);
+  }
+
+  /* Stacked layout on mobile → same flow as classic: Options, then Old, New, Tracked */
+  html[data-layout="stacked"] .workspace {
+    flex-direction: column;
+  }
+
+  html[data-layout="stacked"] .workspace > .options-panel {
+    flex: 0 0 auto;
+    width: 100% !important;
+    max-width: none;
+    order: -1;
+  }
+
+  html[data-layout="stacked"] .workspace-body {
+    width: 100% !important;
+    flex: 1 1 auto;
+  }
+
+  html[data-layout="stacked"] .sources-stack {
+    display: contents;
+  }
+
+  html[data-layout="stacked"] .workspace-editors {
+    flex-direction: column;
+  }
+
+  html[data-layout="stacked"] .options-panel.options-panel-fixed {
+    border-top: none;
+  }
+
+  html[data-layout="stacked"] .options-heading {
+    display: none;
+  }
+
+  html[data-layout="stacked"] .options-toggle {
+    display: inline-flex !important;
+  }
+
+  html[data-layout="stacked"] .row-resizer,
+  html[data-layout="stacked"] .col-resizer {
+    display: none;
+  }
+
+  .workspace-editors.columns {
+    flex-direction: column;
+  }
+
+  .col-resizer {
+    display: none;
+  }
+
+  .workspace-editors .column,
+  html[data-layout="stacked"] .sources-stack .column,
+  html[data-layout="stacked"] .workspace-editors > .column {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: min(180px, 28vh);
   }
 
   #app {
@@ -1123,6 +1604,21 @@ button.view-toggle-btn.is-active .view-toggle-tick {
 
   .options-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .column-title-group h2 {
+    max-width: 4.5rem;
+  }
+
+  .column-hint {
+    display: none;
+  }
+
+  .status-bar {
+    font-size: 0.68rem;
+    padding: 0.28rem 0.4rem;
   }
 }
 

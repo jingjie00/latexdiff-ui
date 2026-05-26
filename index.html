@@ -10,6 +10,11 @@
       (function () {
         var t = localStorage.getItem("latexdiff-theme");
         if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+        var ly = localStorage.getItem("latexdiff-layout");
+        var mobile = window.matchMedia("(max-width: 900px)").matches;
+        if (mobile) document.documentElement.dataset.layout = "classic";
+        else if (ly === "classic" || ly === "stacked") document.documentElement.dataset.layout = ly;
+        else document.documentElement.dataset.layout = "stacked";
       })();
     </script>
   </head>
@@ -25,7 +30,13 @@
             alt=""
           />
           <div class="brand-text">
-            <h1>LaTeX Different — Tracked Changes</h1>
+            <h1 class="brand-title">
+              <span class="tex-latex" aria-label="LaTeX"
+                >L<span class="tex-A">A</span>T<span class="tex-E">E</span>X</span
+              ><span class="tex-different">Different</span
+              ><span class="brand-sep"> — </span
+              ><span class="brand-sub">Tracked Changes</span>
+            </h1>
             <div class="tagline-row">
               <p class="tagline">Runs locally in your browser — no upload</p>
               <button
@@ -35,6 +46,14 @@
                 title="Load short sample .tex files"
               >
                 Load demo
+              </button>
+              <button
+                type="button"
+                id="reset-btn"
+                class="demo-btn secondary"
+                title="Clear Old, New, and Tracked columns"
+              >
+                Reset
               </button>
             </div>
           </div>
@@ -62,6 +81,26 @@
             </svg>
             <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path fill="currentColor" d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-16h1v3h-1V2zm0 19h1v3h-1v-3zM2 11h3v1H2v-1zm19 0h3v1h-3v-1zM4.22 4.22l2.12 2.12-.71.71-2.12-2.12.71-.71zm14.14 14.14 2.12 2.12-.71.71-2.12-2.12.71-.71zM4.22 19.78l.71-.71 2.12 2.12-.71.71-2.12-2.12zm14.14-14.14.71-.71 2.12 2.12-.71.71-2.12-2.12z"/>
+            </svg>
+          </button>
+          <button
+            type="button"
+            id="layout-toggle"
+            class="secondary icon-btn"
+            aria-label="Switch to classic three-column layout"
+            title="Classic layout (3 columns)"
+          >
+            <svg class="layout-icon layout-icon-classic" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M4 4h5v16H4V4zm7 0h5v16h-5V4zm7 0h5v16h-5V4z"
+              />
+            </svg>
+            <svg class="layout-icon layout-icon-stacked" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M4 4h7v7H4V4zm0 9h7v7H4v-7zm9-9h7v16h-7V4z"
+              />
             </svg>
           </button>
           <div class="tutorial-wrap">
@@ -170,89 +209,12 @@
         </div>
       </header>
 
-      <section class="options-panel" id="options-panel" aria-label="latexdiff options">
-        <div class="options-header">
-          <button
-            type="button"
-            class="options-toggle"
-            id="options-toggle"
-            aria-expanded="true"
-            aria-controls="options-body"
-          >
-            <svg class="options-chevron" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M8.12 9.29 12 13.17l3.88-3.88a1 1 0 1 1 1.42 1.41l-4.59 4.59a1 1 0 0 1-1.42 0L6.7 10.7a1 1 0 0 1 1.41-1.41z"
-              />
-            </svg>
-            <span class="options-title">latexdiff options</span>
-          </button>
-          <span class="options-summary" id="options-summary" hidden></span>
-        </div>
-        <div class="options-body" id="options-body">
-        <div class="options-grid">
-          <label class="opt">
-            <span class="opt-label">Markup type <code>--type</code></span>
-            <select id="markup-type" title="How additions and deletions are shown">
-              <option value="UNDERLINE" selected>UNDERLINE — add underline, delete strike-through</option>
-              <option value="CTRADITIONAL">CTRADITIONAL — colored text (classic)</option>
-              <option value="CFONT">CFONT — colored with font changes</option>
-              <option value="CHANGEBAR">CHANGEBAR — vertical change bar</option>
-              <option value="BOLD">BOLD — bold additions</option>
-              <option value="INVISIBLE">INVISIBLE — track changes invisible in text</option>
-            </select>
-          </label>
-          <label class="opt">
-            <span class="opt-label">Underline style <code>--subtype</code></span>
-            <select id="markup-subtype" title="Subtype for UNDERLINE markup">
-              <option value="" selected>Default</option>
-              <option value="UNDERLINE">UNDERLINE</option>
-              <option value="ULINE">ULINE (ulem)</option>
-              <option value="UWAVE">UWAVE — wavy underline</option>
-              <option value="CFONT">CFONT</option>
-            </select>
-          </label>
-          <label class="opt">
-            <span class="opt-label">Floats <code>--floattype</code></span>
-            <select id="float-type">
-              <option value="FLOATSAFE" selected>FLOATSAFE — protect float captions</option>
-              <option value="IDENTICAL">IDENTICAL — floats must match exactly</option>
-            </select>
-          </label>
-          <label class="opt">
-            <span class="opt-label">Math markup <code>--math-markup</code></span>
-            <select id="math-markup" title="How to mark changes in equations">
-              <option value="0">0 — no markup in math</option>
-              <option value="1">1 — coarse (whole equation)</option>
-              <option value="2" selected>2 — fine (default)</option>
-              <option value="3">3 — fine + arrows for replaced eq.</option>
-            </select>
-          </label>
-          <label class="opt">
-            <span class="opt-label">Encoding <code>--encoding</code></span>
-            <select id="encoding">
-              <option value="utf8" selected>utf8</option>
-              <option value="ascii">ascii</option>
-              <option value="latin1">latin1</option>
-            </select>
-          </label>
-          <div class="opt opt-checks">
-            <label class="checkbox">
-              <input type="checkbox" id="flatten" />
-              <span><code>--flatten</code> inline <code>\input</code> / <code>\include</code></span>
-            </label>
-            <label class="checkbox">
-              <input type="checkbox" id="allow-spaces" />
-              <span><code>--allow-spaces</code> treat space changes as edits</span>
-            </label>
-          </div>
-        </div>
-        </div>
-      </section>
-
+      <div class="workspace">
+        <div class="workspace-body">
       <p class="error-banner hidden" id="error-banner" role="alert"></p>
 
-      <section class="columns" aria-label="LaTeX editors">
+          <section class="workspace-editors columns" id="workspace-editors" aria-label="LaTeX editors">
+            <div class="sources-stack">
         <article class="column" data-column="old">
           <header class="column-header">
             <h2>Old</h2>
@@ -264,10 +226,16 @@
                 aria-label="Swap Old and New"
                 title="Swap Old and New"
               >
-                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <svg class="swap-icon swap-icon-h" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
                   <path
                     fill="currentColor"
                     d="M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z"
+                  />
+                </svg>
+                <svg class="swap-icon swap-icon-v" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3zM9 3L5 6.99h3V14h2V6.99h3L9 3z"
                   />
                 </svg>
               </button>
@@ -334,10 +302,16 @@
                 aria-label="Swap Old and New"
                 title="Swap Old and New"
               >
-                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <svg class="swap-icon swap-icon-h" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
                   <path
                     fill="currentColor"
                     d="M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z"
+                  />
+                </svg>
+                <svg class="swap-icon swap-icon-v" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3zM9 3L5 6.99h3V14h2V6.99h3L9 3z"
                   />
                 </svg>
               </button>
@@ -392,6 +366,7 @@
             </div>
           </div>
         </article>
+            </div>
 
         <article class="column column-output" data-column="tracked">
           <header class="column-header column-header-tracked">
@@ -496,7 +471,172 @@
             </div>
           </div>
         </article>
+          </section>
+        </div>
+      <section class="options-panel" id="options-panel" aria-label="Options">
+        <header class="options-header column-header">
+          <h2 class="options-heading">Options</h2>
+          <button
+            type="button"
+            class="options-toggle"
+            id="options-toggle"
+            aria-expanded="true"
+            aria-controls="options-body"
+          >
+            <svg class="options-chevron" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M8.12 9.29 12 13.17l3.88-3.88a1 1 0 1 1 1.42 1.41l-4.59 4.59a1 1 0 0 1-1.42 0L6.7 10.7a1 1 0 0 1 1.41-1.41z"
+              />
+            </svg>
+            <span class="options-title">Options</span>
+          </button>
+          <span class="options-summary" id="options-summary" hidden></span>
+        </header>
+        <div class="options-body" id="options-body">
+        <div class="options-grid">
+          <label class="opt">
+            <span class="opt-label">Markup type <code>--type</code></span>
+            <select id="markup-type" title="How additions and deletions are shown">
+              <option value="UNDERLINE" selected>UNDERLINE — underline / strike-through</option>
+              <option value="CTRADITIONAL">CTRADITIONAL — colored text (classic)</option>
+              <option value="TRADITIONAL">TRADITIONAL — colored text</option>
+              <option value="CFONT">CFONT — colored + font changes</option>
+              <option value="FONTSTRIKE">FONTSTRIKE — font + strike-through</option>
+              <option value="CHANGEBAR">CHANGEBAR — vertical change bar</option>
+              <option value="CCHANGEBAR">CCHANGEBAR — colored change bar</option>
+              <option value="CULINECHBAR">CULINECHBAR — change bar + underline</option>
+              <option value="CFONTCHBAR">CFONTCHBAR — change bar + font</option>
+              <option value="BOLD">BOLD — bold additions</option>
+              <option value="INVISIBLE">INVISIBLE — invisible in PDF</option>
+              <option value="PDFCOMMENT">PDFCOMMENT — PDF annotations</option>
+            </select>
+          </label>
+          <label class="opt">
+            <span class="opt-label">Bracket style <code>--subtype</code></span>
+            <select id="markup-subtype" title="Margin / label style for change blocks">
+              <option value="" selected>Default (SAFE)</option>
+              <option value="SAFE">SAFE — standard margin marks</option>
+              <option value="MARGIN">MARGIN — margin marks</option>
+              <option value="DVIPSCOL">DVIPSCOL — dvips colors</option>
+              <option value="COLOR">COLOR — color marks</option>
+              <option value="ZLABEL">ZLABEL — zref page labels</option>
+              <option value="ONLYCHANGEDPAGE">ONLYCHANGEDPAGE — changed pages only</option>
+              <option value="UNDERLINE">UNDERLINE (ulem)</option>
+              <option value="ULINE">ULINE (ulem)</option>
+              <option value="UWAVE">UWAVE — wavy underline</option>
+            </select>
+          </label>
+          <label class="opt">
+            <span class="opt-label">Floats <code>--floattype</code></span>
+            <select id="float-type">
+              <option value="FLOATSAFE" selected>FLOATSAFE — protect float captions</option>
+              <option value="IDENTICAL">IDENTICAL — floats must match exactly</option>
+            </select>
+          </label>
+          <label class="opt">
+            <span class="opt-label">Math markup <code>--math-markup</code></span>
+            <select id="math-markup" title="How to mark changes in equations">
+              <option value="0">0 — no markup in math</option>
+              <option value="1">1 — coarse (whole equation)</option>
+              <option value="2" selected>2 — fine (default)</option>
+              <option value="3">3 — fine + arrows for replaced eq.</option>
+            </select>
+          </label>
+          <label class="opt">
+            <span class="opt-label">Figure markup <code>--graphics-markup</code></span>
+            <select id="graphics-markup" title="Highlight \\includegraphics changes">
+              <option value="1" selected>1 — frame new/changed figures</option>
+              <option value="0">0 — no figure highlighting</option>
+              <option value="2">2 — frame new + show deleted (scaled)</option>
+            </select>
+          </label>
+          <label class="opt">
+            <span class="opt-label">Encoding <code>--encoding</code></span>
+            <select id="encoding">
+              <option value="utf8" selected>utf8</option>
+              <option value="ascii">ascii</option>
+              <option value="latin1">latin1</option>
+              <option value="latin9">latin9</option>
+            </select>
+          </label>
+          <div class="opt opt-checks">
+            <label class="checkbox">
+              <input type="checkbox" id="flatten" />
+              <span><code>--flatten</code> inline <code>\input</code> / <code>\include</code></span>
+            </label>
+            <label class="checkbox">
+              <input type="checkbox" id="allow-spaces" />
+              <span><code>--allow-spaces</code> spaces between command arguments</span>
+            </label>
+            <label class="checkbox">
+              <input type="checkbox" id="no-del" />
+              <span><code>--no-del</code> omit deleted text from output</span>
+            </label>
+            <label class="checkbox">
+              <input type="checkbox" id="disable-citation-markup" />
+              <span><code>--disable-citation-markup</code></span>
+            </label>
+            <label class="checkbox">
+              <input type="checkbox" id="disable-auto-mbox" />
+              <span><code>--disable-auto-mbox</code> (ulem styles)</span>
+            </label>
+          </div>
+        </div>
+        <details class="options-advanced">
+          <summary>Advanced command lists</summary>
+          <p class="options-advanced-hint">
+            Comma-separated command names without leading backslash (escape commas as
+            <code>\,</code>). Appends add to latexdiff’s built-in lists.
+          </p>
+          <div class="options-grid options-grid-advanced">
+            <label class="opt opt-wide">
+              <span class="opt-label">Append safe commands <code>--append-safecmd</code></span>
+              <input
+                type="text"
+                id="append-safecmd"
+                placeholder="e.g. mymacro,othercmd"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </label>
+            <label class="opt opt-wide">
+              <span class="opt-label">Exclude safe commands <code>--exclude-safecmd</code></span>
+              <input
+                type="text"
+                id="exclude-safecmd"
+                placeholder="e.g. emph"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </label>
+            <label class="opt opt-wide">
+              <span class="opt-label">Append text commands <code>--append-textcmd</code></span>
+              <input
+                type="text"
+                id="append-textcmd"
+                placeholder="e.g. textbf,citet"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </label>
+            <label class="opt opt-wide">
+              <span class="opt-label">Exclude text commands <code>--exclude-textcmd</code></span>
+              <input
+                type="text"
+                id="exclude-textcmd"
+                placeholder="e.g. url"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </label>
+          </div>
+        </details>
+        </div>
       </section>
+
+
+      </div>
 
       <footer class="site-footer">
         by Tan Jing Jie ·

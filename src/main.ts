@@ -1,7 +1,8 @@
 import "./engine-bootstrap";
 import "./style.css";
-import { LatexDiff } from "wasm-latex-tools";
-import type { LatexDiffOptions } from "wasm-latex-tools";
+
+import { readDiffOptionsFromForm } from "./diff-options-form";
+import { runLatexdiff } from "./latexdiff-run";
 import { setColumnContent, wireColumn, type ColumnSetup } from "./column";
 import { setCopyEnabled, wireCopyButton } from "./copy";
 import { filenameFromHint, setDownloadEnabled, wireDownloadButton } from "./download";
@@ -10,6 +11,9 @@ import { wirePlainPaste } from "./paste";
 import { initBuildTime } from "./build-time";
 import { initLinkedPopovers } from "./popover";
 import { initOptionsPanel } from "./options-panel";
+import { initColumnResize } from "./column-resize";
+import { getEffectiveLayout, initLayout, type AppLayout } from "./layout";
+import { clearStackedPaneStyles, initStackedResize } from "./stacked-resize";
 import { initTheme } from "./theme";
 import { highlightLatexDiffAsync } from "./diff-highlight";
 import { yieldToMain } from "./async";
@@ -38,8 +42,36 @@ const markupSubtype = document.getElementById("markup-subtype") as HTMLSelectEle
 const floatType = document.getElementById("float-type") as HTMLSelectElement;
 const mathMarkup = document.getElementById("math-markup") as HTMLSelectElement;
 const encoding = document.getElementById("encoding") as HTMLSelectElement;
+const graphicsMarkup = document.getElementById("graphics-markup") as HTMLSelectElement;
 const flatten = document.getElementById("flatten") as HTMLInputElement;
 const allowSpaces = document.getElementById("allow-spaces") as HTMLInputElement;
+const noDel = document.getElementById("no-del") as HTMLInputElement;
+const disableCitationMarkup = document.getElementById(
+  "disable-citation-markup",
+) as HTMLInputElement;
+const disableAutoMbox = document.getElementById("disable-auto-mbox") as HTMLInputElement;
+const appendSafecmd = document.getElementById("append-safecmd") as HTMLInputElement;
+const excludeSafecmd = document.getElementById("exclude-safecmd") as HTMLInputElement;
+const appendTextcmd = document.getElementById("append-textcmd") as HTMLInputElement;
+const excludeTextcmd = document.getElementById("exclude-textcmd") as HTMLInputElement;
+
+const diffOptionsForm = {
+  markupType,
+  markupSubtype,
+  floatType,
+  mathMarkup,
+  encoding,
+  graphicsMarkup,
+  flatten,
+  allowSpaces,
+  noDel,
+  disableCitationMarkup,
+  disableAutoMbox,
+  appendSafecmd,
+  excludeSafecmd,
+  appendTextcmd,
+  excludeTextcmd,
+};
 const runBtn = document.getElementById("run-btn") as HTMLButtonElement;
 const oldCopyBtn = document.getElementById("old-copy-btn") as HTMLButtonElement;
 const newCopyBtn = document.getElementById("new-copy-btn") as HTMLButtonElement;
@@ -49,7 +81,9 @@ const newDownloadBtn = document.getElementById("new-download-btn") as HTMLButton
 const trackedDownloadBtn = document.getElementById("tracked-download-btn") as HTMLButtonElement;
 const errorBanner = document.getElementById("error-banner")!;
 const themeToggle = document.getElementById("theme-toggle") as HTMLButtonElement;
+const layoutToggle = document.getElementById("layout-toggle") as HTMLButtonElement;
 const demoBtn = document.getElementById("demo-btn") as HTMLButtonElement;
+const resetBtn = document.getElementById("reset-btn") as HTMLButtonElement;
 const swapBtns = document.querySelectorAll<HTMLButtonElement>(".swap-btn");
 
 const oldEditor = document.getElementById("old-editor") as HTMLTextAreaElement;
@@ -68,7 +102,46 @@ const editors = [oldEditor, newEditor, trackedEditor];
 
 let trackedView: "source" | "preview" = "source";
 let previewRenderJob = 0;
-const columnsEl = document.querySelector(".columns") as HTMLElement;
+const columnsEl = document.getElementById("workspace-editors") as HTMLElement;
+const workspaceEl = document.querySelector(".workspace") as HTMLElement;
+const workspaceBodyEl = document.querySelector(".workspace-body") as HTMLElement;
+const sourcesStackEl = document.querySelector(".sources-stack") as HTMLElement;
+const optionsPanelEl = document.getElementById("options-panel") as HTMLElement;
+
+const stackedResizeTargets = {
+  workspace: workspaceEl,
+  workspaceBody: workspaceBodyEl,
+  editors: columnsEl,
+  sourcesStack: sourcesStackEl,
+  oldColumn: document.querySelector('[data-column="old"]') as HTMLElement,
+  newColumn: document.querySelector('[data-column="new"]') as HTMLElement,
+  trackedColumn: document.querySelector('[data-column="tracked"]') as HTMLElement,
+  optionsPanel: optionsPanelEl,
+};
+
+let teardownColumnResize: (() => void) | null = null;
+let syncOptionsPanelLayout: (() => void) | null = null;
+
+function bindColumnResize(layout: AppLayout): void {
+  teardownColumnResize?.();
+  teardownColumnResize = null;
+  workspaceEl
+    .querySelectorAll(".col-resizer, .row-resizer")
+    .forEach((el) => el.remove());
+  columnsEl.querySelectorAll<HTMLElement>(".column").forEach((col) => {
+    col.style.flex = "";
+    col.style.width = "";
+    col.style.height = "";
+  });
+  clearStackedPaneStyles(stackedResizeTargets);
+  const effective = getEffectiveLayout();
+  if (effective === "classic") {
+    teardownColumnResize = initColumnResize(columnsEl);
+  } else {
+    teardownColumnResize = initStackedResize(stackedResizeTargets);
+  }
+  syncOptionsPanelLayout?.();
+}
 
 const refreshOldLines = wireLineNumbers(
   document.getElementById("old-line-numbers")!,
@@ -203,21 +276,6 @@ function updateActions() {
   setDownloadEnabled(trackedDownloadBtn, hasTracked);
 }
 
-function buildDiffOptions(): Partial<LatexDiffOptions> {
-  const opts: Partial<LatexDiffOptions> = {
-    type: markupType.value as LatexDiffOptions["type"],
-    floattype: floatType.value as "FLOATSAFE" | "IDENTICAL",
-    encoding: encoding.value,
-    mathMarkup: Number(mathMarkup.value),
-    flatten: flatten.checked,
-    allowSpaces: allowSpaces.checked,
-  };
-  if (markupSubtype.value) {
-    opts.subtype = markupSubtype.value;
-  }
-  return opts;
-}
-
 async function renderTrackedPreviewAsync(): Promise<void> {
   const job = ++previewRenderJob;
   const text = trackedEditor.value;
@@ -299,8 +357,12 @@ runBtn.addEventListener("click", async () => {
     const activeRunner = await ensureRunner();
     runBtn.textContent = "Running…";
     setStatus("ready", "Running latexdiff…");
-    const latexDiff = new LatexDiff(activeRunner);
-    const result = await latexDiff.diff(oldContent, newContent, buildDiffOptions());
+    const result = await runLatexdiff(
+      activeRunner,
+      oldContent,
+      newContent,
+      readDiffOptionsFromForm(diffOptionsForm),
+    );
 
     const output = result.output;
     const lineCount = countLines(output);
@@ -372,11 +434,44 @@ for (const btn of swapBtns) {
   btn.addEventListener("click", swapOldNew);
 }
 
+const DEFAULT_OLD_LABEL = "x.tex";
+const DEFAULT_NEW_LABEL = "y.tex";
+const DEFAULT_TRACKED_LABEL = "diff.tex";
+
+function clearColumnFileHint(hint: HTMLElement): void {
+  delete hint.dataset.fromFile;
+  delete hint.dataset.defaultName;
+}
+
+function resetWorkspace(): void {
+  hideError();
+  previewRenderJob += 1;
+
+  clearColumnFileHint(oldHint);
+  clearColumnFileHint(newHint);
+  clearColumnFileHint(trackedHint);
+
+  setColumnContent(oldColumn, "", DEFAULT_OLD_LABEL);
+  setColumnContent(newColumn, "", DEFAULT_NEW_LABEL);
+  setColumnContent(trackedColumn, "", DEFAULT_TRACKED_LABEL);
+
+  setTrackedView("source");
+  trackedPreview.innerHTML =
+    '<span class="preview-empty">Generate diff to see colored \\DIFadd / \\DIFdel preview here.</span>';
+
+  const ready = getRunnerState() === "ready";
+  setStatus(
+    ready ? "ready" : "loading",
+    ready ? "Cleared — paste or drop .tex files" : "Cleared — engine still loading…",
+  );
+  updateActions();
+}
+
 demoBtn.addEventListener("click", () => {
   hideError();
   setColumnContent(oldColumn, getDemoOld(), DEMO_OLD_LABEL);
   setColumnContent(newColumn, getDemoNew(), DEMO_NEW_LABEL);
-  setColumnContent(trackedColumn, "", "diff.tex");
+  setColumnContent(trackedColumn, "", DEFAULT_TRACKED_LABEL);
   setTrackedView("source");
   setStatus(
     getRunnerState() === "ready" ? "ready" : "loading",
@@ -386,6 +481,8 @@ demoBtn.addEventListener("click", () => {
   );
   updateActions();
 });
+
+resetBtn.addEventListener("click", resetWorkspace);
 
 viewSourceBtn.addEventListener("click", () => setTrackedView("source"));
 viewPreviewBtn.addEventListener("click", () => setTrackedView("preview"));
@@ -407,6 +504,14 @@ function onFilePaste(editor: HTMLTextAreaElement, file: File) {
 
 initBuildTime(document.getElementById("build-time")!);
 initTheme(themeToggle);
+syncOptionsPanelLayout = initOptionsPanel(
+  document.getElementById("options-panel")!,
+  document.getElementById("options-toggle") as HTMLButtonElement,
+  document.getElementById("options-body")!,
+  document.getElementById("options-summary")!,
+  diffOptionsForm,
+);
+initLayout(layoutToggle, bindColumnResize);
 initLinkedPopovers([
   {
     wrap: document.querySelector(".tutorial-wrap")!,
@@ -419,21 +524,6 @@ initLinkedPopovers([
     popover: document.getElementById("info-popover")!,
   },
 ]);
-initOptionsPanel(
-  document.getElementById("options-panel")!,
-  document.getElementById("options-toggle") as HTMLButtonElement,
-  document.getElementById("options-body")!,
-  document.getElementById("options-summary")!,
-  {
-    markupType,
-    markupSubtype,
-    floatType,
-    mathMarkup,
-    encoding,
-    flatten,
-    allowSpaces,
-  },
-);
 wirePlainPaste(editors, onFilePaste);
 wireColumn(oldColumn);
 wireColumn(newColumn);
