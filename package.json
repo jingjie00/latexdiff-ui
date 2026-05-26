@@ -1,0 +1,19 @@
+{
+  "name": "latexdiff-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "postinstall": "wasm-latex-tools copy-assets"
+  },
+  "dependencies": {
+    "wasm-latex-tools": "^0.1.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}
