@@ -1,4 +1,6 @@
 node_modules
 dist
 public/core
+.firebase
+firebase-debug.log
 .DS_Store
