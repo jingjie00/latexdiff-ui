@@ -21,7 +21,7 @@ const TEXT_EXTENSIONS = new Set([
   "bbl",
 ]);
 
-function isTextLikeFile(file: File): boolean {
+export function isTextLikeFile(file: File): boolean {
   if (file.type.startsWith("text/")) return true;
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
   return TEXT_EXTENSIONS.has(ext);

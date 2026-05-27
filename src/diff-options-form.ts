@@ -18,6 +18,44 @@ export interface DiffOptionsFormElements {
   excludeTextcmd: HTMLInputElement;
 }
 
+/** Initial values matching index.html defaults. */
+export const DEFAULT_DIFF_OPTIONS = {
+  markupType: "UNDERLINE",
+  markupSubtype: "",
+  floatType: "FLOATSAFE",
+  mathMarkup: "2",
+  graphicsMarkup: "1",
+  encoding: "utf8",
+  flatten: false,
+  allowSpaces: false,
+  noDel: false,
+  disableCitationMarkup: false,
+  disableAutoMbox: false,
+  appendSafecmd: "",
+  excludeSafecmd: "",
+  appendTextcmd: "",
+  excludeTextcmd: "",
+} as const;
+
+export function resetDiffOptionsForm(form: DiffOptionsFormElements): void {
+  const d = DEFAULT_DIFF_OPTIONS;
+  form.markupType.value = d.markupType;
+  form.markupSubtype.value = d.markupSubtype;
+  form.floatType.value = d.floatType;
+  form.mathMarkup.value = d.mathMarkup;
+  form.graphicsMarkup.value = d.graphicsMarkup;
+  form.encoding.value = d.encoding;
+  form.flatten.checked = d.flatten;
+  form.allowSpaces.checked = d.allowSpaces;
+  form.noDel.checked = d.noDel;
+  form.disableCitationMarkup.checked = d.disableCitationMarkup;
+  form.disableAutoMbox.checked = d.disableAutoMbox;
+  form.appendSafecmd.value = d.appendSafecmd;
+  form.excludeSafecmd.value = d.excludeSafecmd;
+  form.appendTextcmd.value = d.appendTextcmd;
+  form.excludeTextcmd.value = d.excludeTextcmd;
+}
+
 export function readDiffOptionsFromForm(
   form: DiffOptionsFormElements,
 ): AppDiffOptions {

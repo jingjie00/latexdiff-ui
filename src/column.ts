@@ -1,4 +1,4 @@
-import { normalizePastedText } from "./paste";
+import { isTextLikeFile, normalizePastedText } from "./paste";
 
 export interface ColumnSetup {
   wrap: HTMLElement;
@@ -26,6 +26,19 @@ export async function readDropData(dt: DataTransfer): Promise<string | null> {
   }
 
   return null;
+}
+
+export async function applyFileToColumn(setup: ColumnSetup, file: File): Promise<boolean> {
+  if (!isTextLikeFile(file)) {
+    return false;
+  }
+
+  const text = normalizePastedText(await file.text());
+  setup.hint.dataset.fromFile = "1";
+  setup.hint.dataset.defaultName = setup.hint.textContent ?? "";
+  setColumnContent(setup, text, file.name);
+  setup.textarea.focus();
+  return true;
 }
 
 export function setColumnContent(
@@ -81,12 +94,18 @@ export function wireColumn(setup: ColumnSetup): void {
     const dt = e.dataTransfer;
     if (!dt) return;
 
+    const file = dt.files?.[0];
+    if (file) {
+      if (await applyFileToColumn(setup, file)) {
+        return;
+      }
+    }
+
     const text = await readDropData(dt);
     if (text === null) {
       return;
     }
 
-    const file = dt.files?.[0];
     const label = file?.name ?? "dropped text";
     setup.hint.dataset.fromFile = "1";
     setup.hint.dataset.defaultName = setup.hint.textContent;

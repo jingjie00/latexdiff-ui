@@ -9,6 +9,12 @@ import { filenameFromHint, setDownloadEnabled, wireDownloadButton } from "./down
 import { wireLineNumbers } from "./line-numbers";
 import { isEditorWrapEnabled, onEditorWrapChange, wireWrapToggles } from "./editor-wrap";
 import { wirePlainPaste } from "./paste";
+import { wireWorkflowTabCycle } from "./tab-cycle";
+import {
+  NEW_EDITOR_EMPTY_HINT,
+  OLD_EDITOR_EMPTY_HINT,
+  wireColumnUpload,
+} from "./upload";
 import { initBuildTime } from "./build-time";
 import { initLinkedPopovers } from "./popover";
 import { initOptionsPanel } from "./options-panel";
@@ -89,6 +95,8 @@ const trackedCopyBtn = document.getElementById("tracked-copy-btn") as HTMLButton
 const oldDownloadBtn = document.getElementById("old-download-btn") as HTMLButtonElement;
 const newDownloadBtn = document.getElementById("new-download-btn") as HTMLButtonElement;
 const trackedDownloadBtn = document.getElementById("tracked-download-btn") as HTMLButtonElement;
+const oldUploadBtn = document.getElementById("old-upload-btn") as HTMLButtonElement;
+const newUploadBtn = document.getElementById("new-upload-btn") as HTMLButtonElement;
 const errorBanner = document.getElementById("error-banner")!;
 const themeToggle = document.getElementById("theme-toggle") as HTMLButtonElement;
 const layoutToggle = document.getElementById("layout-toggle") as HTMLButtonElement;
@@ -110,8 +118,19 @@ const trackedViewStack = document.getElementById("tracked-view-stack")!;
 
 const editors = [oldEditor, newEditor, trackedEditor];
 
+oldEditor.placeholder = OLD_EDITOR_EMPTY_HINT;
+newEditor.placeholder = NEW_EDITOR_EMPTY_HINT;
+
 let trackedView: "source" | "preview" = "source";
 let previewRenderJob = 0;
+const workflowTabCycle = wireWorkflowTabCycle(
+  oldEditor,
+  newEditor,
+  runBtn,
+  trackedEditor,
+  trackedPreview,
+  () => trackedView === "preview",
+);
 const columnsEl = document.getElementById("workspace-editors") as HTMLElement;
 const generateOverlay = document.getElementById("generate-overlay") as HTMLElement;
 const generateOverlayDetail = document.getElementById("generate-overlay-detail")!;
@@ -414,6 +433,7 @@ function setTrackedView(
   trackedViewStack.classList.toggle("is-source", !isPreview);
   trackedViewStack.classList.toggle("is-preview", isPreview);
   previewLegend.setAttribute("aria-hidden", String(!isPreview));
+  workflowTabCycle.syncTrackedTabIndex(isPreview);
 
   viewSourceBtn.classList.toggle("is-active", !isPreview);
   viewPreviewBtn.classList.toggle("is-active", isPreview);
@@ -470,6 +490,7 @@ runBtn.addEventListener("click", async () => {
   }
 
   generateInFlight = true;
+  previewRenderJob += 1;
   hideError();
   runBtn.disabled = true;
   runBtn.classList.add("is-busy");
@@ -650,6 +671,7 @@ initTheme(themeToggle);
 syncOptionsPanelLayout = initOptionsPanel(
   document.getElementById("options-panel")!,
   document.getElementById("options-toggle") as HTMLButtonElement,
+  document.getElementById("options-reset-btn") as HTMLButtonElement,
   document.getElementById("options-body")!,
   document.getElementById("options-summary")!,
   diffOptionsForm,
@@ -677,6 +699,8 @@ onEditorWrapChange(() => {
 wireColumn(oldColumn);
 wireColumn(newColumn);
 wireColumn(trackedColumn);
+wireColumnUpload(oldColumn, oldUploadBtn);
+wireColumnUpload(newColumn, newUploadBtn);
 
 onLoadProgressChange(() => {
   updateLoadProgressUI();

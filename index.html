@@ -218,7 +218,20 @@
             <div class="sources-stack">
         <article class="column" data-column="old">
           <header class="column-header">
-            <h2>Old</h2>
+            <div class="column-title-group">
+              <h2>Old</h2>
+              <button
+                type="button"
+                id="old-upload-btn"
+                class="column-upload-btn icon-btn"
+                aria-label="Upload .tex file"
+                title="Upload .tex file"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path fill="currentColor" d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" />
+                </svg>
+              </button>
+            </div>
             <div class="column-meta">
               <span class="column-hint" id="old-hint">x.tex</span>
               <button
@@ -300,7 +313,8 @@
                   spellcheck="false"
                   autocomplete="off"
                   autocorrect="off"
-                  placeholder="Paste (⌘V / Ctrl+V) or drop a file — plain text only…"
+                  placeholder=""
+                  tabindex="1"
                 ></textarea>
                 <div class="drop-overlay" aria-hidden="true">Drop to replace</div>
               </div>
@@ -310,7 +324,20 @@
 
         <article class="column" data-column="new">
           <header class="column-header">
-            <h2>New</h2>
+            <div class="column-title-group">
+              <h2>New</h2>
+              <button
+                type="button"
+                id="new-upload-btn"
+                class="column-upload-btn icon-btn"
+                aria-label="Upload .tex file"
+                title="Upload .tex file"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path fill="currentColor" d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" />
+                </svg>
+              </button>
+            </div>
             <div class="column-meta">
               <span class="column-hint" id="new-hint">y.tex</span>
               <button
@@ -392,7 +419,8 @@
                   spellcheck="false"
                   autocomplete="off"
                   autocorrect="off"
-                  placeholder="Paste (⌘V / Ctrl+V) or drop a file — plain text only…"
+                  placeholder=""
+                  tabindex="2"
                 ></textarea>
                 <div class="drop-overlay" aria-hidden="true">Drop to replace</div>
               </div>
@@ -406,7 +434,9 @@
             <div class="column-title-row">
               <div class="column-title-group">
                 <h2>Tracked Changes</h2>
-                <button type="button" id="run-btn" class="generate-btn">Generate</button>
+                <button type="button" id="run-btn" class="generate-btn" tabindex="3">
+                  Generate
+                </button>
               </div>
               <div class="column-meta column-meta-tracked">
                 <span class="column-hint" id="tracked-hint">diff.tex</span>
@@ -513,7 +543,7 @@
                   id="tracked-preview"
                   class="editor preview-pane hidden"
                   aria-readonly="true"
-                  tabindex="0"
+                  tabindex="-1"
                 ></pre>
                 <div class="drop-overlay" aria-hidden="true">Drop to replace</div>
               </div>
@@ -537,23 +567,35 @@
         </div>
       <section class="options-panel" id="options-panel" aria-label="Options">
         <header class="options-header column-header">
-          <h2 class="options-heading">Options</h2>
-          <button
-            type="button"
-            class="options-toggle"
-            id="options-toggle"
-            aria-expanded="true"
-            aria-controls="options-body"
-          >
-            <svg class="options-chevron" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M8.12 9.29 12 13.17l3.88-3.88a1 1 0 1 1 1.42 1.41l-4.59 4.59a1 1 0 0 1-1.42 0L6.7 10.7a1 1 0 0 1 1.41-1.41z"
-              />
-            </svg>
-            <span class="options-title">Options</span>
-          </button>
-          <span class="options-summary" id="options-summary" hidden></span>
+          <div class="options-header-start">
+            <h2 class="options-heading">Options</h2>
+            <button
+              type="button"
+              class="options-toggle"
+              id="options-toggle"
+              aria-expanded="true"
+              aria-controls="options-body"
+            >
+              <svg class="options-chevron" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M8.12 9.29 12 13.17l3.88-3.88a1 1 0 1 1 1.42 1.41l-4.59 4.59a1 1 0 0 1-1.42 0L6.7 10.7a1 1 0 0 1 1.41-1.41z"
+                />
+              </svg>
+              <span class="options-title">Options</span>
+            </button>
+          </div>
+          <div class="options-header-end">
+            <button
+              type="button"
+              id="options-reset-btn"
+              class="options-reset-btn secondary"
+              title="Restore default latexdiff options"
+            >
+              Reset default
+            </button>
+            <span class="options-summary" id="options-summary" hidden></span>
+          </div>
         </header>
         <div class="options-body" id="options-body">
         <div class="options-grid">

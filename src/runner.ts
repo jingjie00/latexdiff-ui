@@ -39,6 +39,26 @@ let initPromise: Promise<WebPerlRunner> | null = null;
 let loadError: string | null = null;
 /** WebPerl iframe reloads after each script; must be Ready before the next run. */
 let perlRuntimeReady = false;
+
+/** wasm-latex-tools stores the first Ready event.source; the iframe reloads after each run. */
+type PerlRunnerInternals = WebPerlRunner & { perlRunner: Window | null };
+
+function syncPerlRunnerTarget(activeRunner: WebPerlRunner): void {
+  const iframe = document.querySelector<HTMLIFrameElement>('iframe[name="perlrunner"]');
+  const win = iframe?.contentWindow;
+  if (win) {
+    (activeRunner as PerlRunnerInternals).perlRunner = win;
+  }
+}
+
+function patchRunnerForIframeReload(activeRunner: WebPerlRunner): WebPerlRunner {
+  const originalRunScript = activeRunner.runScript.bind(activeRunner);
+  activeRunner.runScript = (...args: Parameters<WebPerlRunner["runScript"]>) => {
+    syncPerlRunnerTarget(activeRunner);
+    return originalRunScript(...args);
+  };
+  return activeRunner;
+}
 let perlReadyWaiters: Array<{ resolve: () => void; reject: (err: Error) => void }> = [];
 let perlReadyListenerInstalled = false;
 
@@ -96,6 +116,9 @@ function installPerlReadyListener(): void {
     if (!data || typeof data !== "object") return;
     if (data.perlRunnerState === "Ready") {
       perlRuntimeReady = true;
+      if (runner) {
+        syncPerlRunnerTarget(runner);
+      }
       const waiters = perlReadyWaiters;
       perlReadyWaiters = [];
       for (const w of waiters) {
@@ -115,6 +138,9 @@ export function markPerlRuntimeBusy(): void {
 export function waitForPerlRuntimeReady(timeoutMs = PERL_READY_TIMEOUT_MS): Promise<void> {
   installPerlReadyListener();
   if (perlRuntimeReady) {
+    if (runner) {
+      syncPerlRunnerTarget(runner);
+    }
     return Promise.resolve();
   }
 
@@ -401,11 +427,13 @@ function createRunner(): WebPerlRunner {
   const perl = perlScriptsPath();
   logLoad(`WebPerlRunner webperlBasePath=${base}`);
   logLoad(`WebPerlRunner perlScriptsPath=${perl}`);
-  return new WebPerlRunner({
-    webperlBasePath: base,
-    perlScriptsPath: perl,
-    verbose: true,
-  });
+  return patchRunnerForIframeReload(
+    new WebPerlRunner({
+      webperlBasePath: base,
+      perlScriptsPath: perl,
+      verbose: true,
+    }),
+  );
 }
 
 async function initializeRunner(): Promise<WebPerlRunner> {

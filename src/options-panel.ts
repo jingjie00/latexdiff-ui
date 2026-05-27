@@ -1,6 +1,6 @@
 const STORAGE_KEY = "latexdiff-options-collapsed";
 
-import type { DiffOptionsFormElements } from "./diff-options-form";
+import { resetDiffOptionsForm, type DiffOptionsFormElements } from "./diff-options-form";
 import type { AppLayout } from "./layout";
 
 export type OptionsSummaryInputs = DiffOptionsFormElements;
@@ -43,6 +43,7 @@ function useStackedSidebarOptions(): boolean {
 export function initOptionsPanel(
   panel: HTMLElement,
   toggleBtn: HTMLButtonElement,
+  resetBtn: HTMLButtonElement,
   body: HTMLElement,
   summaryEl: HTMLElement,
   inputs: OptionsSummaryInputs,
@@ -68,6 +69,7 @@ export function initOptionsPanel(
   function syncLayoutMode(_layout?: AppLayout): void {
     const fixedSidebar = useStackedSidebarOptions();
     panel.classList.toggle("options-panel-fixed", fixedSidebar);
+    resetBtn.hidden = false;
     if (fixedSidebar) {
       panel.classList.remove("is-collapsed");
       body.hidden = false;
@@ -82,6 +84,11 @@ export function initOptionsPanel(
   toggleBtn.addEventListener("click", () => {
     if (useStackedSidebarOptions()) return;
     setClassicCollapsed(!panel.classList.contains("is-collapsed"));
+  });
+
+  resetBtn.addEventListener("click", () => {
+    resetDiffOptionsForm(inputs);
+    refreshSummary();
   });
 
   const watch: (HTMLElement | HTMLInputElement | HTMLSelectElement)[] = [
