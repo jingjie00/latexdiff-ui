@@ -20,6 +20,7 @@
   --col-old: #991b1b;
   --col-new: #047857;
   --col-tracked: #d97706;
+  --col-options: #1a1d26;
   --dif-del-bg: #fde8e8;
   --dif-del-fg: #b91c1c;
   --dif-add-bg: #dbeafe;
@@ -47,6 +48,7 @@
   --col-old: #f87171;
   --col-new: #34d399;
   --col-tracked: #f0c674;
+  --col-options: #e8eaef;
   --dif-del-bg: #3f1d1d;
   --dif-del-fg: #fca5a5;
   --dif-add-bg: #1e2a4a;
@@ -203,10 +205,6 @@ html[data-layout="stacked"] .options-summary {
   display: none !important;
 }
 
-html[data-layout="stacked"] .options-panel.options-panel-fixed {
-  border-top: 3px solid var(--text);
-}
-
 html[data-layout="stacked"] .options-panel.options-panel-fixed .options-header {
   border-bottom-color: var(--border);
 }
@@ -216,10 +214,6 @@ html[data-layout="stacked"] .options-panel.options-panel-fixed .options-body {
 }
 
 /* Classic / collapsible: same Options chrome as stacked, but keep expand toggle. */
-html[data-layout="classic"] .options-panel {
-  border-top: 3px solid var(--text);
-}
-
 html[data-layout="classic"] .options-heading {
   display: block;
 }
@@ -582,10 +576,16 @@ button#reset-btn:hover:not(:disabled) {
   flex-shrink: 0;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-top: 3px solid var(--text);
   border-radius: var(--radius);
   box-shadow: 0 2px 8px var(--shadow);
   overflow: hidden;
+}
+
+.options-header.column-header {
+  border-top: 3px solid var(--col-options);
+  background: var(--surface-2);
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid var(--border);
 }
 
 .options-header {
@@ -616,11 +616,11 @@ button#reset-btn:hover:not(:disabled) {
   margin: 0;
   font-size: 0.88rem;
   font-weight: 600;
-  color: var(--text);
+  color: var(--col-options);
   flex-shrink: 0;
 }
 
-.options-panel:not(.is-collapsed) .options-header {
+.options-panel:not(.is-collapsed) .options-header.column-header {
   border-bottom-color: var(--border);
 }
 
@@ -635,7 +635,7 @@ button.options-toggle {
   border-radius: 6px;
   background: transparent;
   box-shadow: none;
-  color: var(--text);
+  color: var(--col-options);
   font-size: 0.88rem;
   font-weight: 600;
   text-transform: none;
@@ -643,8 +643,8 @@ button.options-toggle {
 }
 
 button.options-toggle:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--border) 35%, transparent);
-  color: var(--text);
+  background: color-mix(in srgb, var(--col-options) 10%, var(--surface-2));
+  color: var(--col-options);
 }
 
 button.options-toggle:focus-visible {
@@ -654,12 +654,12 @@ button.options-toggle:focus-visible {
 
 .options-chevron {
   flex-shrink: 0;
-  color: var(--muted);
+  color: var(--col-options);
   transition: transform 0.2s ease, color 0.15s ease;
 }
 
 button.options-toggle:hover:not(:disabled) .options-chevron {
-  color: var(--text);
+  color: var(--col-options);
 }
 
 .options-panel.is-collapsed .options-chevron {
@@ -1865,10 +1865,6 @@ button.view-toggle-btn.is-active .view-toggle-tick {
 
   html[data-layout="stacked"] .workspace-editors {
     flex-direction: column;
-  }
-
-  html[data-layout="stacked"] .options-panel.options-panel-fixed {
-    border-top: 3px solid var(--text);
   }
 
   html[data-layout="stacked"] .options-heading {
