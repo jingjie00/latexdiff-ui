@@ -1,5 +1,5 @@
 import type { LatexDiffOptions, ScriptResult, WebPerlRunner } from "wasm-latex-tools";
-import { markPerlRuntimeBusy, waitForPerlRuntimeReady } from "./runner";
+import { markPerlRuntimeBusy, preparePerlRuntimeForRun, waitForPerlRuntimeAfterRun } from "./runner";
 
 /** UI + CLI options passed to latexdiff (includes flags beyond wasm-latex-tools wrapper). */
 export interface AppDiffOptions {
@@ -110,7 +110,7 @@ export async function runLatexdiff(
   const outputPath = `/tmp/diff_${t}.tex`;
   const args = buildLatexdiffCliArgs(oldPath, newPath, options);
 
-  await waitForPerlRuntimeReady();
+  await preparePerlRuntimeForRun(runner);
   markPerlRuntimeBusy();
 
   const runPromise = runner.runScript(
@@ -159,7 +159,7 @@ export async function runLatexdiff(
     );
   }
 
-  await waitForPerlRuntimeReady();
+  await waitForPerlRuntimeAfterRun();
 
   return result;
 }

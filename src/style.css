@@ -1633,12 +1633,18 @@ button.view-toggle-btn.is-active .view-toggle-tick {
   justify-content: center;
   pointer-events: none;
   opacity: 0;
-  background: var(--drop-old);
+  background: color-mix(in srgb, var(--editor-bg) 62%, var(--drop-old));
   border: 2px dashed var(--col-old);
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--col-old);
-  transition: opacity 0.12s;
+  transition:
+    opacity 0.12s,
+    background 0.12s;
+}
+
+.editor-wrap.drag-over .editor::placeholder {
+  opacity: 0.15;
 }
 
 .editor-wrap.drag-over .drop-overlay {
@@ -1646,13 +1652,13 @@ button.view-toggle-btn.is-active .view-toggle-tick {
 }
 
 .column[data-column="new"] .editor-wrap.drag-over .drop-overlay {
-  background: var(--drop-new);
+  background: color-mix(in srgb, var(--editor-bg) 62%, var(--drop-new));
   border-color: var(--col-new);
   color: var(--col-new);
 }
 
 .column[data-column="tracked"] .editor-wrap.drag-over .drop-overlay {
-  background: var(--drop-tracked);
+  background: color-mix(in srgb, var(--editor-bg) 62%, var(--drop-tracked));
   border-color: var(--col-tracked);
   color: var(--col-tracked);
 }

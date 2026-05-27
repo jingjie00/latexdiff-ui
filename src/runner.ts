@@ -108,6 +108,123 @@ export function onLoadLogChange(cb: (lines: readonly string[]) => void): () => v
   return () => logListeners.delete(cb);
 }
 
+function getPerlIframe(): HTMLIFrameElement | null {
+  return document.querySelector<HTMLIFrameElement>('iframe[name="perlrunner"]');
+}
+
+function nudgePerlDiscovery(): void {
+  getPerlIframe()?.contentWindow?.postMessage({ perlRunnerDiscovery: 1 }, "*");
+}
+
+function cancelPerlReadyWaiters(reason = "Perl runtime reset"): void {
+  const stale = perlReadyWaiters;
+  perlReadyWaiters = [];
+  const err = new Error(reason);
+  for (const w of stale) {
+    w.reject(err);
+  }
+}
+
+async function reloadPerlIframe(): Promise<void> {
+  const iframe = getPerlIframe();
+  if (!iframe?.src) {
+    return;
+  }
+
+  logLoad("Reloading perlrunner iframe…");
+  perlRuntimeReady = false;
+  const src = iframe.src.split("#")[0].split("?")[0];
+
+  await new Promise<void>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      iframe.removeEventListener("load", onLoad);
+      reject(new Error("perlrunner iframe reload timed out"));
+    }, PERL_READY_TIMEOUT_MS);
+
+    const onLoad = () => {
+      window.clearTimeout(timer);
+      resolve();
+    };
+
+    iframe.addEventListener("load", onLoad, { once: true });
+    iframe.src = "about:blank";
+    window.requestAnimationFrame(() => {
+      iframe.src = `${src}?_=${Date.now()}`;
+    });
+  });
+}
+
+async function waitForPerlRuntimeReadyInternal(
+  timeoutMs = PERL_READY_TIMEOUT_MS,
+): Promise<void> {
+  installPerlReadyListener();
+  if (perlRuntimeReady) {
+    if (runner) {
+      syncPerlRunnerTarget(runner);
+    }
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const entry = {
+      resolve: () => {
+        window.clearTimeout(timer);
+        resolve();
+      },
+      reject: (err: Error) => {
+        window.clearTimeout(timer);
+        reject(err);
+      },
+    };
+    perlReadyWaiters.push(entry);
+
+    const timer = window.setTimeout(() => {
+      perlReadyWaiters = perlReadyWaiters.filter((w) => w !== entry);
+      entry.reject(
+        new Error(
+          `Perl engine did not become ready within ${timeoutMs / 1000}s (it reloads after each diff). Try refreshing the page.`,
+        ),
+      );
+    }, timeoutMs);
+
+    nudgePerlDiscovery();
+  });
+}
+
+/** Clear stale wait state and ensure the perl iframe is Ready before a diff run. */
+export async function preparePerlRuntimeForRun(activeRunner: WebPerlRunner): Promise<void> {
+  installPerlReadyListener();
+  cancelPerlReadyWaiters();
+  perlRuntimeReady = false;
+  syncPerlRunnerTarget(activeRunner);
+
+  try {
+    await waitForPerlRuntimeReadyInternal();
+  } catch (firstErr) {
+    const msg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+    logLoad(`Perl ready wait failed (${msg}); reloading iframe…`);
+    cancelPerlReadyWaiters();
+    perlRuntimeReady = false;
+    await reloadPerlIframe();
+    await waitForPerlRuntimeReadyInternal();
+  }
+
+  syncPerlRunnerTarget(activeRunner);
+}
+
+/** After a script run the iframe reloads; wait briefly without failing the diff result. */
+export async function waitForPerlRuntimeAfterRun(): Promise<void> {
+  const POST_RUN_READY_MS = 20_000;
+  try {
+    await waitForPerlRuntimeReadyInternal(POST_RUN_READY_MS);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logLoad(`Post-run ready wait: ${msg}`);
+    cancelPerlReadyWaiters();
+    perlRuntimeReady = false;
+  }
+}
+
 function installPerlReadyListener(): void {
   if (perlReadyListenerInstalled) return;
   perlReadyListenerInstalled = true;
@@ -136,39 +253,7 @@ export function markPerlRuntimeBusy(): void {
 
 /** Wait until the hidden perlrunner iframe is Ready (it reloads after every script). */
 export function waitForPerlRuntimeReady(timeoutMs = PERL_READY_TIMEOUT_MS): Promise<void> {
-  installPerlReadyListener();
-  if (perlRuntimeReady) {
-    if (runner) {
-      syncPerlRunnerTarget(runner);
-    }
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve, reject) => {
-    const entry = {
-      resolve: () => {
-        window.clearTimeout(timer);
-        resolve();
-      },
-      reject: (err: Error) => {
-        window.clearTimeout(timer);
-        reject(err);
-      },
-    };
-    perlReadyWaiters.push(entry);
-
-    const timer = window.setTimeout(() => {
-      perlReadyWaiters = perlReadyWaiters.filter((w) => w !== entry);
-      reject(
-        new Error(
-          `Perl engine did not become ready within ${timeoutMs / 1000}s (it reloads after each diff). Try refreshing the page.`,
-        ),
-      );
-    }, timeoutMs);
-
-    const iframe = document.querySelector<HTMLIFrameElement>('iframe[name="perlrunner"]');
-    iframe?.contentWindow?.postMessage({ perlRunnerDiscovery: 1 }, "*");
-  });
+  return waitForPerlRuntimeReadyInternal(timeoutMs);
 }
 
 function logLoad(line: string) {

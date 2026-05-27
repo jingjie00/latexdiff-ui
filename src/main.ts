@@ -22,7 +22,7 @@ import { initColumnResize } from "./column-resize";
 import { getEffectiveLayout, initLayout, type AppLayout } from "./layout";
 import { clearStackedPaneStyles, initStackedResize } from "./stacked-resize";
 import { initTheme } from "./theme";
-import { highlightLatexDiffAsync } from "./diff-highlight";
+import { buildPreviewHtml, setPreviewMessage } from "./diff-highlight";
 import { yieldToMain } from "./async";
 import { countLines, PREVIEW_AUTO_MAX_CHARS, PREVIEW_AUTO_MAX_LINES } from "./large-doc";
 import { DEMO_NEW_LABEL, DEMO_OLD_LABEL, getDemoNew, getDemoOld } from "./samples";
@@ -115,6 +115,7 @@ const viewSourceBtn = document.getElementById("view-source-btn") as HTMLButtonEl
 const viewPreviewBtn = document.getElementById("view-preview-btn") as HTMLButtonElement;
 const previewLegend = document.getElementById("preview-legend")!;
 const trackedViewStack = document.getElementById("tracked-view-stack")!;
+const trackedColumnEl = document.querySelector('[data-column="tracked"]') as HTMLElement;
 
 const editors = [oldEditor, newEditor, trackedEditor];
 
@@ -195,7 +196,7 @@ const refreshTrackedLines = wireLineNumbers(
   document.getElementById("tracked-line-numbers")!,
   () => trackedEditor.value,
   trackedEditor,
-  isEditorWrapEnabled,
+  () => trackedView !== "preview" && isEditorWrapEnabled(),
   trackedEditor,
   trackedPreview,
 );
@@ -384,36 +385,61 @@ function updateActions() {
   setDownloadEnabled(trackedDownloadBtn, hasTracked);
 }
 
+function trackedReadyStatus(): string {
+  if (trackedEditor.value.trim()) {
+    return trackedView === "preview"
+      ? "Preview — additions & deletions highlighted"
+      : "Done — tracked changes ready";
+  }
+  return getRunnerState() === "ready"
+    ? "Ready — paste into Old and New, then Generate"
+    : "Ready — paste into Old and New";
+}
+
 async function renderTrackedPreviewAsync(): Promise<void> {
   const job = ++previewRenderJob;
   const text = trackedEditor.value;
 
   if (!text.trim()) {
-    trackedPreview.innerHTML =
-      '<span class="preview-empty">Generate diff to see colored \\DIFadd / \\DIFdel preview here.</span>';
+    setPreviewMessage(
+      trackedPreview,
+      "preview-empty",
+      "Generate diff to see colored \\DIFadd / \\DIFdel preview here.",
+    );
     return;
   }
 
-  trackedPreview.innerHTML =
-    '<span class="preview-loading">Rendering preview…</span>';
+  setPreviewMessage(trackedPreview, "preview-loading", "Rendering preview…");
 
   try {
-    const html = await highlightLatexDiffAsync(text, (pct) => {
-      if (job !== previewRenderJob) return;
-      if (pct % 10 === 0) {
-        const detail = `Rendering preview… ${pct}%`;
-        setStatus("loading", detail);
-        if (generateInFlight) {
-          setGenerateBusy(true, detail);
-        }
-      }
-    });
+    await yieldToMain();
     if (job !== previewRenderJob) return;
-    trackedPreview.innerHTML = html;
+
+    const { html, truncated } = buildPreviewHtml(text);
+    if (job !== previewRenderJob) return;
+
+    trackedPreview.replaceChildren();
+    if (truncated) {
+      const note = document.createElement("p");
+      note.className = "preview-empty";
+      note.textContent =
+        "Preview truncated — showing the first portion. Use Src view for the full diff.";
+      trackedPreview.appendChild(note);
+    }
+    trackedPreview.insertAdjacentHTML("beforeend", html);
+    refreshTrackedLines();
+
+    if (!generateInFlight && trackedView === "preview") {
+      setStatus("ready", trackedReadyStatus());
+    }
   } catch (err) {
     if (job !== previewRenderJob) return;
     const msg = err instanceof Error ? err.message : String(err);
-    trackedPreview.innerHTML = `<span class="preview-empty">Preview failed: ${msg}</span>`;
+    setPreviewMessage(trackedPreview, "preview-empty", `Preview failed: ${msg}`);
+    if (!generateInFlight) {
+      setStatus("error", "Preview failed");
+      statusDot.setAttribute("title", msg);
+    }
   }
 }
 
@@ -430,6 +456,7 @@ function setTrackedView(
 
   trackedEditor.classList.toggle("hidden", isPreview);
   trackedPreview.classList.toggle("hidden", !isPreview);
+  trackedColumnEl.classList.toggle("is-preview-view", isPreview);
   trackedViewStack.classList.toggle("is-source", !isPreview);
   trackedViewStack.classList.toggle("is-preview", isPreview);
   previewLegend.setAttribute("aria-hidden", String(!isPreview));
@@ -441,10 +468,13 @@ function setTrackedView(
   viewPreviewBtn.setAttribute("aria-selected", String(isPreview));
 
   if (isPreview) {
-    if (options?.refreshLines !== false) {
-      refreshTrackedLines();
-    }
-    return renderTrackedPreviewAsync();
+    refreshTrackedLines();
+    void renderTrackedPreviewAsync();
+    return Promise.resolve();
+  }
+
+  if (!generateInFlight && trackedEditor.value.trim()) {
+    setStatus("ready", trackedReadyStatus());
   }
 
   if (options?.refreshLines !== false) {
@@ -490,8 +520,8 @@ runBtn.addEventListener("click", async () => {
   }
 
   generateInFlight = true;
-  previewRenderJob += 1;
   hideError();
+  clearTrackedOutput();
   runBtn.disabled = true;
   runBtn.classList.add("is-busy");
   const prevLabel = runBtn.textContent;
@@ -607,21 +637,29 @@ function clearColumnFileHint(hint: HTMLElement): void {
   delete hint.dataset.defaultName;
 }
 
+function clearTrackedOutput(): void {
+  previewRenderJob += 1;
+  clearColumnFileHint(trackedHint);
+  setColumnContent(trackedColumn, "", DEFAULT_TRACKED_LABEL);
+  setPreviewMessage(
+    trackedPreview,
+    "preview-empty",
+    "Generate diff to see colored \\DIFadd / \\DIFdel preview here.",
+  );
+  void setTrackedView("source", { refreshLines: false });
+  refreshTrackedLines();
+  updateActions();
+}
+
 function resetWorkspace(): void {
   hideError();
-  previewRenderJob += 1;
 
   clearColumnFileHint(oldHint);
   clearColumnFileHint(newHint);
-  clearColumnFileHint(trackedHint);
 
   setColumnContent(oldColumn, "", DEFAULT_OLD_LABEL);
   setColumnContent(newColumn, "", DEFAULT_NEW_LABEL);
-  setColumnContent(trackedColumn, "", DEFAULT_TRACKED_LABEL);
-
-  setTrackedView("source");
-  trackedPreview.innerHTML =
-    '<span class="preview-empty">Generate diff to see colored \\DIFadd / \\DIFdel preview here.</span>';
+  clearTrackedOutput();
 
   const ready = getRunnerState() === "ready";
   setStatus(
