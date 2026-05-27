@@ -125,35 +125,6 @@ function cancelPerlReadyWaiters(reason = "Perl runtime reset"): void {
   }
 }
 
-async function reloadPerlIframe(): Promise<void> {
-  const iframe = getPerlIframe();
-  if (!iframe?.src) {
-    return;
-  }
-
-  logLoad("Reloading perlrunner iframe…");
-  perlRuntimeReady = false;
-  const src = iframe.src.split("#")[0].split("?")[0];
-
-  await new Promise<void>((resolve, reject) => {
-    const timer = window.setTimeout(() => {
-      iframe.removeEventListener("load", onLoad);
-      reject(new Error("perlrunner iframe reload timed out"));
-    }, PERL_READY_TIMEOUT_MS);
-
-    const onLoad = () => {
-      window.clearTimeout(timer);
-      resolve();
-    };
-
-    iframe.addEventListener("load", onLoad, { once: true });
-    iframe.src = "about:blank";
-    window.requestAnimationFrame(() => {
-      iframe.src = `${src}?_=${Date.now()}`;
-    });
-  });
-}
-
 async function waitForPerlRuntimeReadyInternal(
   timeoutMs = PERL_READY_TIMEOUT_MS,
 ): Promise<void> {
@@ -166,15 +137,18 @@ async function waitForPerlRuntimeReadyInternal(
   }
 
   await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      window.clearInterval(poll);
+      fn();
+    };
+
     const entry = {
-      resolve: () => {
-        window.clearTimeout(timer);
-        resolve();
-      },
-      reject: (err: Error) => {
-        window.clearTimeout(timer);
-        reject(err);
-      },
+      resolve: () => finish(resolve),
+      reject: (err: Error) => finish(() => reject(err)),
     };
     perlReadyWaiters.push(entry);
 
@@ -187,41 +161,63 @@ async function waitForPerlRuntimeReadyInternal(
       );
     }, timeoutMs);
 
+    const poll = window.setInterval(() => {
+      nudgePerlDiscovery();
+      if (runner) {
+        syncPerlRunnerTarget(runner);
+      }
+    }, 100);
+
     nudgePerlDiscovery();
   });
 }
 
-/** Clear stale wait state and ensure the perl iframe is Ready before a diff run. */
-export async function preparePerlRuntimeForRun(activeRunner: WebPerlRunner): Promise<void> {
+/** Tear down the hidden iframe and create a fresh WebPerlRunner (same as a page reload for Perl). */
+async function reinitializePerlRunner(): Promise<WebPerlRunner> {
   installPerlReadyListener();
   cancelPerlReadyWaiters();
   perlRuntimeReady = false;
+
+  getPerlIframe()?.remove();
+
+  const next = createRunner();
+  logLoad("Reinitializing Perl runtime (full reset)…");
+  await next.initialize();
+  runner = next;
+  initPromise = Promise.resolve(next);
+
+  await waitForPerlRuntimeReadyInternal();
+  syncPerlRunnerTarget(next);
+  setState("ready");
+  logLoad("Perl runtime reinitialized");
+  return next;
+}
+
+/** Clear stale wait state and ensure the perl iframe is Ready before a diff run. */
+export async function preparePerlRuntimeForRun(activeRunner: WebPerlRunner): Promise<WebPerlRunner> {
+  installPerlReadyListener();
+  cancelPerlReadyWaiters();
   syncPerlRunnerTarget(activeRunner);
+
+  if (perlRuntimeReady) {
+    return activeRunner;
+  }
 
   try {
     await waitForPerlRuntimeReadyInternal();
   } catch (firstErr) {
     const msg = firstErr instanceof Error ? firstErr.message : String(firstErr);
-    logLoad(`Perl ready wait failed (${msg}); reloading iframe…`);
-    cancelPerlReadyWaiters();
-    perlRuntimeReady = false;
-    await reloadPerlIframe();
-    await waitForPerlRuntimeReadyInternal();
+    logLoad(`Perl ready wait failed (${msg}); reinitializing runtime…`);
+    return reinitializePerlRunner();
   }
 
   syncPerlRunnerTarget(activeRunner);
+  return activeRunner;
 }
 
-/** Full Perl iframe reset — used before an automatic retry after engine errors. */
-export async function recoverPerlRuntime(activeRunner: WebPerlRunner): Promise<void> {
-  installPerlReadyListener();
-  cancelPerlReadyWaiters();
-  perlRuntimeReady = false;
-  syncPerlRunnerTarget(activeRunner);
-  await reloadPerlIframe();
-  await waitForPerlRuntimeReadyInternal();
-  syncPerlRunnerTarget(activeRunner);
-  logLoad("Perl runtime recovered");
+/** Full Perl reset — used before an automatic retry after engine errors. */
+export async function recoverPerlRuntime(): Promise<WebPerlRunner> {
+  return reinitializePerlRunner();
 }
 
 export function isRecoverablePerlError(err: unknown): boolean {

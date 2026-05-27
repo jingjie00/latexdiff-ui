@@ -1,5 +1,6 @@
 import type { LatexDiffOptions, ScriptResult, WebPerlRunner } from "wasm-latex-tools";
 import {
+  getRunner,
   isRecoverablePerlError,
   markPerlRuntimeBusy,
   preparePerlRuntimeForRun,
@@ -129,10 +130,10 @@ async function runLatexdiffOnce(
   const outputPath = `/tmp/diff_${t}.tex`;
   const args = buildLatexdiffCliArgs(oldPath, newPath, options);
 
-  await preparePerlRuntimeForRun(runner);
+  const activeRunner = await preparePerlRuntimeForRun(runner);
   markPerlRuntimeBusy();
 
-  const runPromise = runner.runScript(
+  const runPromise = activeRunner.runScript(
     args,
     [
       ...scripts,
@@ -199,10 +200,11 @@ export async function runLatexdiff(
     }
 
     hooks?.onRetry?.();
-    await recoverPerlRuntime(runner);
+    await recoverPerlRuntime();
+    const recoveredRunner = getRunner() ?? runner;
 
     try {
-      return await runLatexdiffOnce(runner, oldContent, newContent, options);
+      return await runLatexdiffOnce(recoveredRunner, oldContent, newContent, options);
     } catch (retryErr) {
       const msg = retryErr instanceof Error ? retryErr.message : String(retryErr);
       if (isRecoverablePerlError(retryErr)) {
