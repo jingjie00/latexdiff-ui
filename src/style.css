@@ -371,6 +371,10 @@ button#reset-btn:hover:not(:disabled) {
   right: 0;
   z-index: 50;
   width: min(22rem, calc(100vw - 2rem));
+  max-height: min(70vh, calc(100dvh - 5rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 0.75rem 0.85rem;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1744,6 +1748,32 @@ button.view-toggle-btn.is-active .view-toggle-tick {
     width: 1.9rem;
     height: 1.9rem;
     flex-shrink: 0;
+  }
+
+  /* Tutorial / About popovers: anchor to button on desktop but clip off-screen on mobile */
+  .popover {
+    position: fixed;
+    top: max(0.65rem, env(safe-area-inset-top, 0px));
+    right: max(1rem, env(safe-area-inset-right, 0px));
+    left: max(1rem, env(safe-area-inset-left, 0px));
+    bottom: auto;
+    width: auto;
+    max-width: none;
+    max-height: calc(
+      100dvh - 1.3rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
+    );
+  }
+
+  .tutorial-popover {
+    width: auto;
+  }
+
+  body:has(.popover:not([hidden]))::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 49;
+    background: color-mix(in srgb, var(--canvas) 25%, rgb(0 0 0 / 45%));
   }
 
   .column-header {
