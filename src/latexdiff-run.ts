@@ -1,5 +1,11 @@
 import type { LatexDiffOptions, ScriptResult, WebPerlRunner } from "wasm-latex-tools";
-import { markPerlRuntimeBusy, preparePerlRuntimeForRun, waitForPerlRuntimeAfterRun } from "./runner";
+import {
+  isRecoverablePerlError,
+  markPerlRuntimeBusy,
+  preparePerlRuntimeForRun,
+  recoverPerlRuntime,
+  waitForPerlRuntimeAfterRun,
+} from "./runner";
 
 /** UI + CLI options passed to latexdiff (includes flags beyond wasm-latex-tools wrapper). */
 export interface AppDiffOptions {
@@ -18,6 +24,10 @@ export interface AppDiffOptions {
   noDel?: boolean;
   disableCitationMarkup?: boolean;
   disableAutoMbox?: boolean;
+}
+
+export interface RunLatexdiffHooks {
+  onRetry?: () => void;
 }
 
 type VfsFile = { fn: string; text: string };
@@ -96,8 +106,17 @@ function normalizeDiffFailure(result: ScriptResult): string {
   return `latexdiff failed (exit code ${result.exitCode ?? "unknown"})`;
 }
 
-/** Run latexdiff in WebPerl; throws on timeout, non-zero exit, or empty output. */
-export async function runLatexdiff(
+function withRetryHint(msg: string): string {
+  if (msg.includes("Try refreshing the page")) {
+    return msg.replace(
+      "Try refreshing the page.",
+      "An automatic engine reset and retry also failed — try refreshing the page.",
+    );
+  }
+  return `${msg}\n\nAn automatic engine reset and retry also failed — try refreshing the page.`;
+}
+
+async function runLatexdiffOnce(
   runner: WebPerlRunner,
   oldContent: string,
   newContent: string,
@@ -162,6 +181,36 @@ export async function runLatexdiff(
   await waitForPerlRuntimeAfterRun();
 
   return result;
+}
+
+/** Run latexdiff in WebPerl; throws on timeout, non-zero exit, or empty output. */
+export async function runLatexdiff(
+  runner: WebPerlRunner,
+  oldContent: string,
+  newContent: string,
+  options: AppDiffOptions,
+  hooks?: RunLatexdiffHooks,
+): Promise<ScriptResult> {
+  try {
+    return await runLatexdiffOnce(runner, oldContent, newContent, options);
+  } catch (err) {
+    if (!isRecoverablePerlError(err)) {
+      throw err;
+    }
+
+    hooks?.onRetry?.();
+    await recoverPerlRuntime(runner);
+
+    try {
+      return await runLatexdiffOnce(runner, oldContent, newContent, options);
+    } catch (retryErr) {
+      const msg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+      if (isRecoverablePerlError(retryErr)) {
+        throw new Error(withRetryHint(msg));
+      }
+      throw retryErr;
+    }
+  }
 }
 
 export { formatInputSize };

@@ -545,6 +545,13 @@ runBtn.addEventListener("click", async () => {
       oldContent,
       newContent,
       readDiffOptionsFromForm(diffOptionsForm),
+      {
+        onRetry: () => {
+          const detail = "Perl engine stalled — resetting and retrying…";
+          setGenerateBusy(true, detail);
+          setStatus("loading", detail);
+        },
+      },
     );
 
     const output = result.output;

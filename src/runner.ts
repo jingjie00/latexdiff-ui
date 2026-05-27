@@ -212,6 +212,29 @@ export async function preparePerlRuntimeForRun(activeRunner: WebPerlRunner): Pro
   syncPerlRunnerTarget(activeRunner);
 }
 
+/** Full Perl iframe reset — used before an automatic retry after engine errors. */
+export async function recoverPerlRuntime(activeRunner: WebPerlRunner): Promise<void> {
+  installPerlReadyListener();
+  cancelPerlReadyWaiters();
+  perlRuntimeReady = false;
+  syncPerlRunnerTarget(activeRunner);
+  await reloadPerlIframe();
+  await waitForPerlRuntimeReadyInternal();
+  syncPerlRunnerTarget(activeRunner);
+  logLoad("Perl runtime recovered");
+}
+
+export function isRecoverablePerlError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    msg.includes("Perl engine did not become ready") ||
+    msg.includes("perlrunner iframe reload timed out") ||
+    msg.includes("Timeout waiting for script execution") ||
+    msg.includes("Perl engine timed out") ||
+    msg.includes("Perl runtime reset")
+  );
+}
+
 /** After a script run the iframe reloads; wait briefly without failing the diff result. */
 export async function waitForPerlRuntimeAfterRun(): Promise<void> {
   const POST_RUN_READY_MS = 20_000;
