@@ -1123,12 +1123,15 @@ html[data-layout="stacked"] .swap-icon-v {
 }
 
 .generate-btn {
+  /* Button only: the Tracked Changes panel keeps the theme's --col-tracked. */
+  --col-tracked: #7dd3fc;
+  --drop-tracked: #7dd3fc33;
   margin: 0;
   padding: 0.42rem 1rem;
   font-size: 0.8rem;
   font-weight: 650;
   letter-spacing: 0.02em;
-  color: #fff;
+  color: #1a1d26;
   background: var(--col-tracked);
   border: none;
   border-radius: 8px;
@@ -1183,8 +1186,8 @@ html[data-layout="stacked"] .swap-icon-v {
   flex-shrink: 0;
   width: 0.85rem;
   height: 0.85rem;
-  border: 2px solid color-mix(in srgb, #fff 35%, transparent);
-  border-top-color: #fff;
+  border: 2px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-top-color: currentColor;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
